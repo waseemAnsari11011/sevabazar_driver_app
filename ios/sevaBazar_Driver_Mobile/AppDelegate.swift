@@ -24,7 +24,7 @@ class AppDelegate: UIResponder, UIApplicationDelegate {
     window = UIWindow(frame: UIScreen.main.bounds)
 
     factory.startReactNative(
-      withModuleName: "sevaBazar_Driver_Mobile",
+      withModuleName: "driverApp",
       in: window,
       launchOptions: launchOptions
     )

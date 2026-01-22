@@ -31,7 +31,7 @@ const LoginScreen = ({ navigation }) => {
             await AsyncStorage.setItem('driverData', JSON.stringify(data.driver));
             navigation.replace('Home');
         } catch (error) {
-            Alert.alert('Login Failed', error.message || 'Invalid credentials');
+            Alert.alert('Login Failed', error.message);
         } finally {
             setLoading(false);
         }

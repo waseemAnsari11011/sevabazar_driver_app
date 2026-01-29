@@ -7,31 +7,195 @@ import {
     Alert,
     ScrollView,
     StatusBar,
-    Dimensions
+    Dimensions,
+    PermissionsAndroid,
+    Platform,
+    Modal,
+    ActivityIndicator
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useAuth } from '../AuthContext';
 import apiClient from '../api/client';
+import Geolocation from '@react-native-community/geolocation';
 
 const { width } = Dimensions.get('window');
 
+const GOOGLE_MAPS_API_KEY = 'AIzaSyDd-3iQmgrv0Mfpwh-8Y_YHlnTnceshNMA';
+
 const HomeScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
+    const { logout } = useAuth();
     const [driver, setDriver] = useState(null);
+    const [isOnline, setIsOnline] = useState(false);
+    const [currentAddress, setCurrentAddress] = useState('Fetching location...');
+    const [showLocationModal, setShowLocationModal] = useState(false);
     const [walletBalance, setWalletBalance] = useState(0);
     const [loadingBalance, setLoadingBalance] = useState(true);
     const [activeOrder, setActiveOrder] = useState(null);
+
+    const fetchAddress = async (lat, lng) => {
+        try {
+            const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`;
+            const response = await fetch(url);
+            const data = await response.json();
+            if (data.status === 'OK' && data.results.length > 0) {
+                const components = data.results[0].address_components;
+
+                let village = '';
+                let pincode = '';
+
+                // Find Village/Area and Pincode
+                for (const component of components) {
+                    if (component.types.includes('sublocality_level_1') ||
+                        component.types.includes('sublocality') ||
+                        component.types.includes('locality')) {
+                        if (!village) village = component.long_name;
+                    }
+                    if (component.types.includes('postal_code')) {
+                        pincode = component.long_name;
+                    }
+                }
+
+                const shortAddress = village && pincode ? `${village}, ${pincode}` : (village || pincode || data.results[0].formatted_address);
+                setCurrentAddress(shortAddress);
+                return shortAddress;
+            } else {
+                const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+                setCurrentAddress(fallback);
+                return fallback;
+            }
+        } catch (error) {
+            console.error('Reverse geocoding error:', error);
+            const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
+            setCurrentAddress(fallback);
+            return fallback;
+        }
+    };
+
+    const requestLocationPermission = async () => {
+        if (Platform.OS === 'ios') return true;
+        try {
+            const granted = await PermissionsAndroid.request(
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+            );
+            return granted === PermissionsAndroid.RESULTS.GRANTED;
+        } catch (err) {
+            return false;
+        }
+    };
 
     useEffect(() => {
         const loadDriverData = async () => {
             const data = await AsyncStorage.getItem('driverData');
             if (data) {
-                setDriver(JSON.parse(data));
+                const parsedData = JSON.parse(data);
+                setDriver(parsedData);
+                setIsOnline(parsedData.isOnline || false);
+
+                // Initial check if we have last known location
+                if (parsedData.currentLocation?.coordinates) {
+                    const [lng, lat] = parsedData.currentLocation.coordinates;
+                    fetchAddress(lat, lng);
+                }
             }
         };
         loadDriverData();
     }, []);
+
+    const [updatingLocation, setUpdatingLocation] = useState(false);
+
+    const handleUpdateLocation = async (silently = false) => {
+        if (!isOnline && !silently) {
+            Alert.alert('Offline', 'Please go online to update your location.');
+            return;
+        }
+
+        const hasPermission = await requestLocationPermission();
+        if (!hasPermission) return;
+
+        if (!silently) setUpdatingLocation(true);
+
+        Geolocation.getCurrentPosition(
+            async (position) => {
+                const { latitude, longitude } = position.coords;
+                // Fetch address first
+                const address = await fetchAddress(latitude, longitude);
+                try {
+                    // Send both coordinates and address to backend
+                    await apiClient.patch('/driver/location', {
+                        latitude,
+                        longitude,
+                        address: address
+                    });
+                    if (!silently) Alert.alert('Success', 'Location & Address updated.');
+                } catch (err) {
+                    console.error('Failed to sync location:', err);
+                } finally {
+                    setUpdatingLocation(false);
+                }
+            },
+            (error) => {
+                console.error('[Location] GPS Error:', error.message);
+                setUpdatingLocation(false);
+                if (!silently) Alert.alert('Error', 'Could not fetch location.');
+            },
+            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+        );
+    };
+
+    // Periodic Location Update
+    useEffect(() => {
+        if (!isOnline) return;
+
+        const updateLocation = async () => {
+            const hasPermission = await requestLocationPermission();
+            if (!hasPermission) return;
+
+            Geolocation.getCurrentPosition(
+                async (position) => {
+                    const { latitude, longitude } = position.coords;
+                    // Update UI address
+                    fetchAddress(latitude, longitude);
+
+                    try {
+                        console.log(`[Location] Syncing live GPS: ${latitude}, ${longitude}`);
+                        await apiClient.patch('/driver/location', { latitude, longitude });
+                    } catch (err) {
+                        console.error('Failed to sync location to backend:', err);
+                    }
+                },
+                (error) => console.error('[Location] GPS Error:', error.message),
+                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+            );
+        };
+
+        const interval = setInterval(updateLocation, 60000); // Every 1 minute
+        updateLocation(); // Initial update
+
+        return () => clearInterval(interval);
+    }, [isOnline, driver]);
+
+    const handleToggleStatus = async () => {
+        const newStatus = !isOnline;
+        try {
+            const response = await apiClient.patch('/driver/status', { isOnline: newStatus });
+            if (response.status === 200) {
+                setIsOnline(newStatus);
+                // Update AsyncStorage to persist status locally
+                const data = await AsyncStorage.getItem('driverData');
+                if (data) {
+                    const parsed = JSON.parse(data);
+                    parsed.isOnline = newStatus;
+                    await AsyncStorage.setItem('driverData', JSON.stringify(parsed));
+                }
+            }
+        } catch (error) {
+            console.error('Error toggling status:', error);
+            Alert.alert('Error', 'Failed to update online status');
+        }
+    };
 
     useFocusEffect(
         React.useCallback(() => {
@@ -90,8 +254,7 @@ const HomeScreen = ({ navigation }) => {
                     text: 'Logout',
                     style: 'destructive',
                     onPress: async () => {
-                        await AsyncStorage.multiRemove(['driverToken', 'driverData']);
-                        navigation.replace('Login');
+                        await logout();
                     },
                 },
             ]
@@ -108,20 +271,32 @@ const HomeScreen = ({ navigation }) => {
                 {/* Header Section */}
                 <View style={styles.header}>
                     <View style={styles.profileSection}>
-                        <View style={styles.avatarContainer}>
+                        <View style={[styles.avatarContainer, { borderColor: isOnline ? '#4CAF50' : '#FF5252' }]}>
                             <Text style={styles.avatarText}>
                                 {driver?.name?.[0]?.toUpperCase() || 'D'}
                             </Text>
-                            <View style={styles.onlineBadge} />
+                            <View style={[styles.onlineBadge, { backgroundColor: isOnline ? '#4CAF50' : '#FF5252' }]} />
                         </View>
                         <View>
                             <Text style={styles.welcomeText}>Welcome back,</Text>
                             <Text style={styles.driverName}>{driver?.name || 'Habibi'}</Text>
+                            <TouchableOpacity
+                                style={styles.locationBadge}
+                                onPress={() => setShowLocationModal(true)}
+                            >
+                                <Text style={styles.locationText} numberOfLines={1}>
+                                    {currentAddress}
+                                </Text>
+                                <Text style={styles.arrowIcon}>⌄</Text>
+                            </TouchableOpacity>
                         </View>
                     </View>
-                    <TouchableOpacity style={styles.statusToggle}>
-                        <View style={styles.statusDot} />
-                        <Text style={styles.statusLabel}>Online</Text>
+                    <TouchableOpacity
+                        style={[styles.statusToggle, { borderColor: isOnline ? '#4CAF50' : '#444' }]}
+                        onPress={handleToggleStatus}
+                    >
+                        <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#888' }]} />
+                        <Text style={styles.statusLabel}>{isOnline ? 'Online' : 'Offline'}</Text>
                     </TouchableOpacity>
                 </View>
 
@@ -180,11 +355,24 @@ const HomeScreen = ({ navigation }) => {
                         style={[styles.actionButton, { backgroundColor: '#1A1D2E' }]}
                         onPress={() => navigation.navigate('MyOrders')}
                     >
-                        <View style={[styles.actionIconBg, { backgroundColor: '#2196F3' }]}>
-                            <Text style={styles.actionIcon}>📋</Text>
+                        <View style={{ alignItems: 'center' }}>
+                            <View style={[styles.actionIconBg, { backgroundColor: '#2196F3' }]}>
+                                <Text style={styles.actionIcon}>📋</Text>
+                            </View>
+                            <Text style={styles.actionTitle}>My Work</Text>
+                            <Text style={styles.actionSub}>Check orders</Text>
                         </View>
-                        <Text style={styles.actionTitle}>My Work</Text>
-                        <Text style={styles.actionSub}>Check orders</Text>
+                    </TouchableOpacity>
+
+                    <TouchableOpacity
+                        style={[styles.actionButton, { backgroundColor: '#1E2A1E' }]}
+                        onPress={() => navigation.navigate('EarningsHistory')}
+                    >
+                        <View style={[styles.actionIconBg, { backgroundColor: '#4CAF50' }]}>
+                            <Text style={styles.actionIcon}>💰</Text>
+                        </View>
+                        <Text style={styles.actionTitle}>History</Text>
+                        <Text style={styles.actionSub}>Earnings</Text>
                     </TouchableOpacity>
 
                     <TouchableOpacity
@@ -204,6 +392,43 @@ const HomeScreen = ({ navigation }) => {
                     <Text style={styles.footerNote}>Need help? Contact partner support</Text>
                 </View>
             </ScrollView>
+
+            {/* Location Bottom Sheet */}
+            <Modal
+                animationType="slide"
+                transparent={true}
+                visible={showLocationModal}
+                onRequestClose={() => setShowLocationModal(false)}
+            >
+                <TouchableOpacity
+                    style={styles.modalOverlay}
+                    activeOpacity={1}
+                    onPress={() => setShowLocationModal(false)}
+                >
+                    <View style={styles.bottomSheet}>
+                        <View style={styles.sheetHeader}>
+                            <View style={styles.sheetHandle} />
+                            <Text style={styles.sheetTitle}>Your Location</Text>
+                        </View>
+
+                        <View style={styles.addressContainer}>
+                            <Text style={styles.sheetAddressText}>{currentAddress}</Text>
+                        </View>
+
+                        <TouchableOpacity
+                            style={[styles.fetchButton, { opacity: updatingLocation ? 0.7 : 1 }]}
+                            onPress={() => handleUpdateLocation(false)}
+                            disabled={updatingLocation}
+                        >
+                            {updatingLocation ? (
+                                <ActivityIndicator color="#fff" />
+                            ) : (
+                                <Text style={styles.fetchButtonText}>Fetch Location</Text>
+                            )}
+                        </TouchableOpacity>
+                    </View>
+                </TouchableOpacity>
+            </Modal>
         </View>
     );
 };
@@ -456,7 +681,94 @@ const styles = StyleSheet.create({
     footerNote: {
         color: '#555',
         fontSize: 12,
-    }
+    },
+    locationBadge: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+        paddingHorizontal: 10,
+        paddingVertical: 5,
+        backgroundColor: 'rgba(255, 255, 255, 0.08)',
+        borderRadius: 12,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+        maxWidth: width * 0.6,
+    },
+    locationText: {
+        fontSize: 10,
+        color: '#fff',
+        fontWeight: '500',
+        flexShrink: 1,
+    },
+    arrowIcon: {
+        fontSize: 16,
+        color: '#4CAF50',
+        marginLeft: 6,
+        fontWeight: '900', // Ultra bold
+        marginBottom: 4, // Adjust vertical alignment for the chevron
+    },
+    // Modal & Bottom Sheet Styles
+    modalOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0, 0, 0, 0.7)',
+        justifyContent: 'flex-end',
+    },
+    bottomSheet: {
+        backgroundColor: '#1A1A1A',
+        borderTopLeftRadius: 32,
+        borderTopRightRadius: 32,
+        padding: 24,
+        paddingBottom: 40,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.1)',
+    },
+    sheetHeader: {
+        alignItems: 'center',
+        marginBottom: 24,
+    },
+    sheetHandle: {
+        width: 40,
+        height: 4,
+        backgroundColor: '#333',
+        borderRadius: 2,
+        marginBottom: 16,
+    },
+    sheetTitle: {
+        fontSize: 20,
+        fontWeight: 'bold',
+        color: '#fff',
+    },
+    addressContainer: {
+        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        padding: 20,
+        borderRadius: 16,
+        marginBottom: 24,
+        borderWidth: 1,
+        borderColor: 'rgba(255, 255, 255, 0.05)',
+    },
+    sheetAddressText: {
+        fontSize: 16,
+        color: 'rgba(255, 255, 255, 0.8)',
+        lineHeight: 24,
+        textAlign: 'center',
+    },
+    fetchButton: {
+        backgroundColor: '#4CAF50',
+        height: 56,
+        borderRadius: 16,
+        justifyContent: 'center',
+        alignItems: 'center',
+        shadowColor: '#4CAF50',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 8,
+        elevation: 5,
+    },
+    fetchButtonText: {
+        color: '#fff',
+        fontSize: 18,
+        fontWeight: 'bold',
+    },
 });
 
 export default HomeScreen;

@@ -11,9 +11,11 @@ import {
     Platform,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAuth } from '../AuthContext';
 import { loginDriver } from '../api/auth';
 
 const LoginScreen = ({ navigation }) => {
+    const { login } = useAuth();
     const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [loading, setLoading] = useState(false);
@@ -27,11 +29,10 @@ const LoginScreen = ({ navigation }) => {
         setLoading(true);
         try {
             const data = await loginDriver(phone, password);
-            await AsyncStorage.setItem('driverToken', data.token);
-            await AsyncStorage.setItem('driverData', JSON.stringify(data.driver));
-            navigation.replace('Home');
+            await login(data.token, data.driver);
+            // No need for navigation.replace('Home') as AppNavigator will switch stack based on token
         } catch (error) {
-            Alert.alert('Login Failed', error.message || 'Invalid credentials');
+            Alert.alert('Login Failed', error.message);
         } finally {
             setLoading(false);
         }

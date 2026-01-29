@@ -8,6 +8,7 @@ import {
     Linking,
     ScrollView,
     ActivityIndicator,
+    Image,
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
@@ -161,14 +162,51 @@ const DeliveryScreen = ({ route, navigation }) => {
             </View>
 
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Delivery Details</Text>
+                <Text style={styles.sectionTitle}>Order Items</Text>
+                <View style={styles.card}>
+                    {rawData.items && rawData.items.length > 0 ? (
+                        rawData.items.map((item, index) => (
+                            <View key={index} style={styles.itemRow}>
+                                {item.image ? (
+                                    <Image source={{ uri: item.image }} style={styles.itemImage} />
+                                ) : (
+                                    <View style={[styles.itemImage, styles.noImagePlaceholder]}>
+                                        <Text style={styles.noImageText}>No Img</Text>
+                                    </View>
+                                )}
+                                <View style={styles.itemInfo}>
+                                    <Text style={styles.itemName}>{item.name} x{item.quantity}</Text>
+                                    {item.variations && item.variations.length > 0 && (
+                                        <Text style={styles.itemMeta}>
+                                            {item.variations.map(v =>
+                                                v.attributes?.map(a => `${a.name}: ${a.value}`).join(', ')
+                                            ).filter(Boolean).join(' | ')}
+                                        </Text>
+                                    )}
+                                </View>
+                                <Text style={styles.itemPrice}>₹{item.totalAmount || (item.price * item.quantity)}</Text>
+                            </View>
+                        ))
+                    ) : (
+                        <Text style={styles.noItemsText}>No items data available</Text>
+                    )}
+                    <View style={styles.divider} />
+                    <View style={styles.totalRow}>
+                        <Text style={styles.totalLabel}>Total Bill:</Text>
+                        <Text style={styles.totalValue}>₹{rawData.totalAmount || 'N/A'}</Text>
+                    </View>
+                </View>
+            </View>
+
+            <View style={styles.section}>
+                <Text style={styles.sectionTitle}>Earnings Info</Text>
                 <View style={styles.card}>
                     <View style={styles.detailRow}>
-                        <Text style={styles.label}>Distance:</Text>
+                        <Text style={styles.label}>Total Distance:</Text>
                         <Text style={styles.value}>{order.totalDistance} km</Text>
                     </View>
                     <View style={styles.detailRow}>
-                        <Text style={styles.label}>Earning:</Text>
+                        <Text style={styles.label}>Your Earning:</Text>
                         <Text style={styles.earningValue}>₹{order.earning}</Text>
                     </View>
                 </View>
@@ -264,6 +302,71 @@ const styles = StyleSheet.create({
         fontSize: 18,
         fontWeight: 'bold',
         color: '#4CAF50',
+    },
+    itemRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        paddingVertical: 8,
+    },
+    itemInfo: {
+        flex: 1,
+    },
+    itemName: {
+        fontSize: 16,
+        color: '#333',
+        fontWeight: '500',
+    },
+    itemMeta: {
+        fontSize: 14,
+        color: '#666',
+    },
+    itemPrice: {
+        fontSize: 16,
+        color: '#333',
+        fontWeight: 'bold',
+    },
+    itemImage: {
+        width: 50,
+        height: 50,
+        borderRadius: 8,
+        marginRight: 12,
+    },
+    noImagePlaceholder: {
+        backgroundColor: '#f0f0f0',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#eee',
+    },
+    noImageText: {
+        fontSize: 10,
+        color: '#999',
+    },
+    noItemsText: {
+        fontSize: 14,
+        color: '#999',
+        textAlign: 'center',
+        padding: 10,
+    },
+    divider: {
+        height: 1,
+        backgroundColor: '#eee',
+        marginVertical: 12,
+    },
+    totalRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+    },
+    totalLabel: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    totalValue: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#E91E63',
     },
     mapsButton: {
         backgroundColor: '#2196F3',

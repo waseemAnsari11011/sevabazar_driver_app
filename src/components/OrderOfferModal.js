@@ -14,6 +14,14 @@ const OrderOfferModal = ({ visible, orderData, onAccept, onReject }) => {
     if (!orderData) return null;
 
     const { earning, totalDistance, orderId } = orderData;
+    const safeOrderId = orderId ? String(orderId) : 'N/A';
+
+    // Safety check for distance: Allow 0 km as it is valid for test environments or nearby deliveries
+    const displayDistance = (typeof totalDistance === 'number' && totalDistance >= 0 && totalDistance < 5000)
+        ? `${totalDistance} km`
+        : 'Calculating...';
+
+    const displayEarning = (typeof earning === 'number' && earning >= 0) ? `₹${earning}` : '---';
 
     return (
         <Modal
@@ -29,21 +37,33 @@ const OrderOfferModal = ({ visible, orderData, onAccept, onReject }) => {
                     </View>
 
                     <View style={styles.content}>
-                        <View style={styles.infoCard}>
-                            <Text style={styles.label}>Earning</Text>
-                            <Text style={styles.earningValue}>₹{earning}</Text>
+                        <View style={styles.vendorBox}>
+                            <Text style={styles.vendorLabel}>From:</Text>
+                            <Text style={styles.vendorName}>{orderData.rawOfferData?.vendorName || 'Vendor'}</Text>
                         </View>
 
-                        <View style={styles.infoCard}>
-                            <Text style={styles.label}>Total Distance</Text>
-                            <Text style={styles.distanceValue}>{totalDistance} km</Text>
-                            <Text style={styles.subtext}>
-                                (Your location → Pickup → Drop)
-                            </Text>
+                        <View style={styles.row}>
+                            <View style={[styles.infoCard, { flex: 1, marginRight: 8 }]}>
+                                <Text style={styles.label}>Earning</Text>
+                                <Text style={styles.earningValue}>{displayEarning}</Text>
+                            </View>
+
+                            <View style={[styles.infoCard, { flex: 1, marginLeft: 8 }]}>
+                                <Text style={styles.label}>Distance</Text>
+                                <Text style={styles.distanceValue}>{displayDistance.split(' ')[0]}</Text>
+                                <Text style={styles.unitText}>km</Text>
+                            </View>
                         </View>
+
+                        {orderData.rawOfferData?.totalAmount && (
+                            <View style={styles.billBox}>
+                                <Text style={styles.billLabel}>Order Total Bill:</Text>
+                                <Text style={styles.billValue}>₹{orderData.rawOfferData.totalAmount}</Text>
+                            </View>
+                        )}
 
                         <View style={styles.orderInfo}>
-                            <Text style={styles.orderIdText}>Order #{orderId}</Text>
+                            <Text style={styles.orderIdText}>Order #{safeOrderId}</Text>
                         </View>
                     </View>
 
@@ -107,35 +127,77 @@ const styles = StyleSheet.create({
         alignItems: 'center',
     },
     label: {
-        fontSize: 14,
+        fontSize: 12,
         color: '#666',
-        marginBottom: 8,
+        marginBottom: 4,
         textTransform: 'uppercase',
         letterSpacing: 1,
     },
+    row: {
+        flexDirection: 'row',
+        marginBottom: 16,
+    },
     earningValue: {
-        fontSize: 48,
+        fontSize: 32,
         fontWeight: 'bold',
         color: '#4CAF50',
     },
     distanceValue: {
-        fontSize: 36,
+        fontSize: 32,
         fontWeight: 'bold',
         color: '#2196F3',
     },
-    subtext: {
+    unitText: {
+        fontSize: 14,
+        color: '#666',
+        fontWeight: '600',
+    },
+    vendorBox: {
+        backgroundColor: '#E8F5E9',
+        padding: 12,
+        borderRadius: 12,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#C8E6C9',
+    },
+    vendorLabel: {
         fontSize: 12,
-        color: '#999',
-        marginTop: 4,
-        textAlign: 'center',
+        color: '#4CAF50',
+        fontWeight: 'bold',
+    },
+    vendorName: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#2E7D32',
+    },
+    billBox: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#f9f9f9',
+        borderRadius: 12,
+        marginBottom: 16,
+        borderStyle: 'dashed',
+        borderWidth: 1,
+        borderColor: '#ddd',
+    },
+    billLabel: {
+        fontSize: 14,
+        color: '#666',
+    },
+    billValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
     },
     orderInfo: {
         alignItems: 'center',
-        marginTop: 8,
+        marginTop: 0,
     },
     orderIdText: {
-        fontSize: 16,
-        color: '#666',
+        fontSize: 14,
+        color: '#999',
         fontWeight: '600',
     },
     buttonContainer: {

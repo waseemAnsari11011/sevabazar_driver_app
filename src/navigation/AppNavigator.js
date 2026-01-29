@@ -11,90 +11,108 @@ import RegisterScreen from '../screens/RegisterScreen';
 import PickupScreen from '../screens/PickupScreen';
 import DeliveryScreen from '../screens/DeliveryScreen';
 import MyOrdersScreen from '../screens/MyOrdersScreen';
+import EarningsHistoryScreen from '../screens/EarningsHistoryScreen';
 import OrderOfferModal from '../components/OrderOfferModal';
+import { useAuth } from '../AuthContext';
 import socketService from '../services/socketService';
 
 const Stack = createStackNavigator();
 
 const AppNavigator = () => {
     const navigationRef = useRef(null);
-    const [loading, setLoading] = useState(true);
-    const [initialRoute, setInitialRoute] = useState('Login');
+    const { authToken, loading, logout } = useAuth();
     const [offerModalVisible, setOfferModalVisible] = useState(false);
     const [currentOffer, setCurrentOffer] = useState(null);
-
-    useEffect(() => {
-        const checkToken = async () => {
-            try {
-                const token = await AsyncStorage.getItem('driverToken');
-                console.log('[AppNavigator] Token found:', !!token);
-                if (token) {
-                    setInitialRoute('Home');
-                    // Connect socket when driver is logged in
-                    console.log('[AppNavigator] Connecting socket...');
-                    await socketService.connect();
-                    console.log('[AppNavigator] Setting up socket listeners...');
-                    setupSocketListeners();
-                }
-            } catch (e) {
-                console.error('[AppNavigator] Failed to load token', e);
-            } finally {
-                setLoading(false);
-            }
-        };
-        checkToken();
-
-        // Cleanup on unmount
-        return () => {
-            console.log('[AppNavigator] Cleaning up socket listeners');
-            socketService.removeAllListeners('new_order_offer');
-        };
-    }, []);
+    const isListenersSetup = useRef(false);
 
     const setupSocketListeners = () => {
-        console.log('[AppNavigator] Socket listener registered for new_order_offer');
+        if (isListenersSetup.current) return;
+
+        console.log('[AppNavigator] Setting up socket listeners...');
         socketService.on('new_order_offer', async (offerData) => {
             console.log('[AppNavigator] ✅ NEW ORDER OFFER RECEIVED:', offerData);
 
-            // Calculate earning and distance using the API
             try {
-                const driverData = await AsyncStorage.getItem('driverData');
-                const driver = JSON.parse(driverData);
-                console.log('[AppNavigator] Driver data loaded:', driver._id);
+                // If the offer already has calculation data from backend, use it!
+                // This ensures consistency with the "My Work" section.
+                if (offerData.earning !== undefined && offerData.totalDistance !== undefined) {
+                    setCurrentOffer({
+                        orderId: offerData.orderId,
+                        earning: offerData.earning,
+                        totalDistance: offerData.totalDistance,
+                        rawOfferData: offerData
+                    });
+                    setOfferModalVisible(true);
+                    return;
+                }
 
-                // Prepare payload for calculate-delivery API
+                // Fallback for older offers without pre-calculated data
+                const driverData = await AsyncStorage.getItem('driverData');
+                if (!driverData) return;
+                const driver = JSON.parse(driverData);
+
                 const payload = {
-                    currentLocation: driver.currentLocation || { latitude: 0, longitude: 0 },
+                    currentLocation: driver.currentLocation,
                     pickupLocation: offerData.pickupLocation,
                     dropLocation: offerData.dropLocation
                 };
 
-                console.log('[AppNavigator] Calling calculate-delivery API...');
+                if (!payload.currentLocation || !payload.pickupLocation || !payload.dropLocation) {
+                    console.warn('[AppNavigator] Missing coordinates for calculation:', payload);
+                    setCurrentOffer({
+                        orderId: offerData.orderId,
+                        earning: offerData.earning || 0,
+                        totalDistance: offerData.totalDistance || 0,
+                        rawOfferData: offerData
+                    });
+                    setOfferModalVisible(true);
+                    return;
+                }
+
                 const response = await apiClient.post('/calculate-delivery', payload);
-                console.log('[AppNavigator] API response:', response.data);
 
                 setCurrentOffer({
                     orderId: offerData.orderId,
-                    earning: response.data.driverEarning || 0,
+                    earning: response.data.totalFee || 0,
                     totalDistance: response.data.totalDistance || 0,
                     rawOfferData: offerData
                 });
-                console.log('[AppNavigator] Opening modal...');
                 setOfferModalVisible(true);
             } catch (error) {
                 console.error('[AppNavigator] Error calculating delivery:', error);
-                // Fallback: show modal with basic data
                 setCurrentOffer({
                     orderId: offerData.orderId,
-                    earning: 0,
-                    totalDistance: 0,
+                    earning: offerData.earning || 0,
+                    totalDistance: offerData.totalDistance || 0,
                     rawOfferData: offerData
                 });
-                console.log('[AppNavigator] Opening modal with fallback data...');
                 setOfferModalVisible(true);
             }
         });
+
+        socketService.on('order_taken', ({ orderId }) => {
+            console.log('[AppNavigator] 📢 Order taken by another driver:', orderId);
+            setOfferModalVisible(false);
+            setCurrentOffer(null);
+        });
+
+        isListenersSetup.current = true;
     };
+
+    useEffect(() => {
+        if (authToken) {
+            console.log('[AppNavigator] AuthToken present, connecting socket...');
+            socketService.connect().then(() => {
+                setupSocketListeners();
+            });
+        }
+        return () => {
+            if (isListenersSetup.current) {
+                socketService.removeAllListeners('new_order_offer');
+                isListenersSetup.current = false;
+            }
+        };
+    }, [authToken]);
 
     const handleAcceptOrder = async () => {
         try {
@@ -102,16 +120,16 @@ const AppNavigator = () => {
             const driver = JSON.parse(driverData);
 
             const response = await apiClient.put(
-                `/delivery/accept-order/${driver._id}`,
+                `/delivery/order-offer-response/${driver._id}`,
                 {
-                    orderId: currentOffer.orderId,
-                    currentLocation: driver.currentLocation || { latitude: 0, longitude: 0 }
+                    orderId: currentOffer?.orderId,
+                    action: 'accept',
+                    currentLocation: driver?.currentLocation || { latitude: 0, longitude: 0 }
                 }
             );
 
             if (response.data.success) {
                 setOfferModalVisible(false);
-                // Navigate to Pickup screen using ref
                 navigationRef.current?.navigate('Pickup', { order: currentOffer });
                 setCurrentOffer(null);
             }
@@ -121,16 +139,28 @@ const AppNavigator = () => {
         }
     };
 
-    const handleRejectOrder = () => {
-        setOfferModalVisible(false);
-        setCurrentOffer(null);
-        // Optionally emit rejection event to backend
-        socketService.emit('order_rejected', { orderId: currentOffer?.orderId });
+    const handleRejectOrder = async () => {
+        try {
+            const driverData = await AsyncStorage.getItem('driverData');
+            const driver = JSON.parse(driverData);
+
+            setOfferModalVisible(false);
+            const response = await apiClient.put(
+                `/delivery/order-offer-response/${driver._id}`,
+                {
+                    orderId: currentOffer?.orderId,
+                    action: 'reject'
+                }
+            );
+            setCurrentOffer(null);
+        } catch (error) {
+            console.error('Error rejecting order:', error);
+        }
     };
 
     if (loading) {
         return (
-            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#fff' }}>
                 <ActivityIndicator size="large" color="#007AFF" />
             </View>
         );
@@ -139,37 +169,49 @@ const AppNavigator = () => {
     return (
         <>
             <NavigationContainer ref={navigationRef}>
-                <Stack.Navigator initialRouteName={initialRoute}>
-                    <Stack.Screen
-                        name="Login"
-                        component={LoginScreen}
-                        options={{ headerShown: false }}
-                    />
-                    <Stack.Screen
-                        name="Register"
-                        component={RegisterScreen}
-                        options={{ title: 'Driver Registration' }}
-                    />
-                    <Stack.Screen
-                        name="Pickup"
-                        component={PickupScreen}
-                        options={{ title: 'Pickup Order' }}
-                    />
-                    <Stack.Screen
-                        name="Delivery"
-                        component={DeliveryScreen}
-                        options={{ title: 'Deliver Order' }}
-                    />
-                    <Stack.Screen
-                        name="Home"
-                        component={HomeScreen}
-                        options={{ headerShown: false }}
-                    />
-                    <Stack.Screen
-                        name="MyOrders"
-                        component={MyOrdersScreen}
-                        options={{ title: 'My Work (Mera Kaam)' }}
-                    />
+                <Stack.Navigator>
+                    {authToken == null ? (
+                        <>
+                            <Stack.Screen
+                                name="Login"
+                                component={LoginScreen}
+                                options={{ headerShown: false }}
+                            />
+                            <Stack.Screen
+                                name="Register"
+                                component={RegisterScreen}
+                                options={{ title: 'Driver Registration' }}
+                            />
+                        </>
+                    ) : (
+                        <>
+                            <Stack.Screen
+                                name="Home"
+                                component={HomeScreen}
+                                options={{ headerShown: false }}
+                            />
+                            <Stack.Screen
+                                name="MyOrders"
+                                component={MyOrdersScreen}
+                                options={{ title: 'My Work (Mera Kaam)' }}
+                            />
+                            <Stack.Screen
+                                name="Pickup"
+                                component={PickupScreen}
+                                options={{ title: 'Pickup Order' }}
+                            />
+                            <Stack.Screen
+                                name="Delivery"
+                                component={DeliveryScreen}
+                                options={{ title: 'Deliver Order' }}
+                            />
+                            <Stack.Screen
+                                name="EarningsHistory"
+                                component={EarningsHistoryScreen}
+                                options={{ title: 'Completed Work' }}
+                            />
+                        </>
+                    )}
                 </Stack.Navigator>
             </NavigationContainer>
 

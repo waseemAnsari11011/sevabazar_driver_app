@@ -75,67 +75,69 @@ const OTPInputModal = ({ visible, onSubmit, onCancel, loading, title, message })
         <Modal
             visible={visible}
             transparent={true}
-            animationType="fade"
+            animationType="slide"
             onRequestClose={handleCancel}
         >
-            <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
-                <View style={styles.overlay}>
-                    <KeyboardAvoidingView
-                        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-                        style={styles.keyboardView}
-                    >
-                        <View style={styles.modalContainer}>
-                            <View style={styles.headerIndicator} />
+            <View style={styles.overlay}>
+                <TouchableWithoutFeedback onPress={handleCancel}>
+                    <View style={styles.absoluteOverlay} />
+                </TouchableWithoutFeedback>
 
-                            <Text style={styles.title}>{title || 'Enter OTP'}</Text>
-                            <Text style={styles.subtitle}>
-                                {message || 'Enter the 4-digit code'}
-                            </Text>
+                <KeyboardAvoidingView
+                    behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+                    style={styles.keyboardView}
+                >
+                    <View style={styles.modalContainer}>
+                        <View style={styles.headerIndicator} />
 
-                            {/* Hidden TextInput to trigger native keyboard */}
-                            <TextInput
-                                ref={inputRef}
-                                style={styles.hiddenInput}
-                                keyboardType="number-pad"
-                                maxLength={4}
-                                value={otp}
-                                onChangeText={handleOtpChange}
-                                caretHidden={true}
-                            />
+                        <Text style={styles.title}>{title || 'Enter OTP'}</Text>
+                        <Text style={styles.subtitle}>
+                            {message || 'Enter the 4-digit code'}
+                        </Text>
 
-                            <View style={styles.contentContainer}>
-                                {renderOtpBoxes()}
-                            </View>
+                        {/* Hidden TextInput to trigger native keyboard */}
+                        <TextInput
+                            ref={inputRef}
+                            style={styles.hiddenInput}
+                            keyboardType="number-pad"
+                            maxLength={4}
+                            value={otp}
+                            onChangeText={handleOtpChange}
+                            caretHidden={true}
+                        />
 
-                            <View style={styles.buttonContainer}>
-                                <TouchableOpacity
-                                    style={[styles.button, styles.cancelButton]}
-                                    onPress={handleCancel}
-                                    disabled={loading}
-                                >
-                                    <Text style={styles.cancelButtonText}>Cancel</Text>
-                                </TouchableOpacity>
-
-                                <TouchableOpacity
-                                    style={[
-                                        styles.button,
-                                        styles.submitButton,
-                                        otp.length !== 4 && styles.disabledButton,
-                                    ]}
-                                    onPress={handleSubmit}
-                                    disabled={otp.length !== 4 || loading}
-                                >
-                                    {loading ? (
-                                        <ActivityIndicator color="#fff" />
-                                    ) : (
-                                        <Text style={styles.submitButtonText}>Verify</Text>
-                                    )}
-                                </TouchableOpacity>
-                            </View>
+                        <View style={styles.contentContainer}>
+                            {renderOtpBoxes()}
                         </View>
-                    </KeyboardAvoidingView>
-                </View>
-            </TouchableWithoutFeedback>
+
+                        <View style={styles.buttonContainer}>
+                            <TouchableOpacity
+                                style={[styles.button, styles.cancelButton]}
+                                onPress={handleCancel}
+                                disabled={loading}
+                            >
+                                <Text style={styles.cancelButtonText}>Cancel</Text>
+                            </TouchableOpacity>
+
+                            <TouchableOpacity
+                                style={[
+                                    styles.button,
+                                    styles.submitButton,
+                                    otp.length !== 4 && styles.disabledButton,
+                                ]}
+                                onPress={handleSubmit}
+                                disabled={otp.length !== 4 || loading}
+                            >
+                                {loading ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={styles.submitButtonText}>Verify</Text>
+                                )}
+                            </TouchableOpacity>
+                        </View>
+                    </View>
+                </KeyboardAvoidingView>
+            </View>
         </Modal>
     );
 };
@@ -144,11 +146,17 @@ const styles = StyleSheet.create({
     overlay: {
         flex: 1,
         backgroundColor: 'rgba(0, 0, 0, 0.6)',
-        justifyContent: 'flex-end', // Slide from bottom feel
+    },
+    absoluteOverlay: {
+        position: 'absolute',
+        top: 0,
+        left: 0,
+        right: 0,
+        bottom: 0,
     },
     keyboardView: {
-        width: '100%',
-        alignItems: 'center',
+        flex: 1,
+        justifyContent: 'flex-end',
     },
     modalContainer: {
         width: '100%',

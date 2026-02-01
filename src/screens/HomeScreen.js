@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback, useRef } from 'react';
 import {
     StyleSheet,
     View,
@@ -26,249 +26,193 @@ const GOOGLE_MAPS_API_KEY = 'AIzaSyDd-3iQmgrv0Mfpwh-8Y_YHlnTnceshNMA';
 
 const HomeScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
-    const { logout } = useAuth();
-    const [driver, setDriver] = useState(null);
+    const { driver, logout, authToken } = useAuth();
+    const [floatingCash, setFloatingCash] = useState(0);
+    const [floatingCashLimit, setFloatingCashLimit] = useState(2000);
     const [isOnline, setIsOnline] = useState(false);
+    const [isPaymentOverdue, setIsPaymentOverdue] = useState(false);
+    const [overdueCount, setOverdueCount] = useState(0);
     const [currentAddress, setCurrentAddress] = useState('Fetching location...');
     const [showLocationModal, setShowLocationModal] = useState(false);
     const [walletBalance, setWalletBalance] = useState(0);
-    const [loadingBalance, setLoadingBalance] = useState(true);
+    const [loadingBalance, setLoadingBalance] = useState(false);
     const [activeOrder, setActiveOrder] = useState(null);
+    const [updatingLocation, setUpdatingLocation] = useState(false);
+    const isMounted = useRef(true);
 
-    const fetchAddress = async (lat, lng) => {
+    useEffect(() => {
+        isMounted.current = true;
+        return () => {
+            isMounted.current = false;
+        };
+    }, []);
+
+    // useFocusEffect calling fetchWalletBalance and handleUpdateLocation is moved below handleUpdateLocation definition
+
+    const handleToggleStatus = async () => {
+        const newStatus = !isOnline;
+        setIsOnline(newStatus); // Optimistic update
         try {
-            const url = `https://maps.googleapis.com/maps/api/geocode/json?latlng=${lat},${lng}&key=${GOOGLE_MAPS_API_KEY}`;
-            const response = await fetch(url);
-            const data = await response.json();
-            if (data.status === 'OK' && data.results.length > 0) {
-                const components = data.results[0].address_components;
-
-                let village = '';
-                let pincode = '';
-
-                // Find Village/Area and Pincode
-                for (const component of components) {
-                    if (component.types.includes('sublocality_level_1') ||
-                        component.types.includes('sublocality') ||
-                        component.types.includes('locality')) {
-                        if (!village) village = component.long_name;
-                    }
-                    if (component.types.includes('postal_code')) {
-                        pincode = component.long_name;
-                    }
-                }
-
-                const shortAddress = village && pincode ? `${village}, ${pincode}` : (village || pincode || data.results[0].formatted_address);
-                setCurrentAddress(shortAddress);
-                return shortAddress;
-            } else {
-                const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-                setCurrentAddress(fallback);
-                return fallback;
-            }
+            await apiClient.patch('/driver/status', { isOnline: newStatus });
         } catch (error) {
-            console.error('Reverse geocoding error:', error);
-            const fallback = `${lat.toFixed(4)}, ${lng.toFixed(4)}`;
-            setCurrentAddress(fallback);
-            return fallback;
+            console.error('Error updating status:', error);
+            setIsOnline(!newStatus); // Revert on error
+            Alert.alert('Error', 'Could not update status');
         }
     };
 
-    const requestLocationPermission = async () => {
+    const handleResumeTask = () => {
+        if (activeOrder) {
+            // Navigate to appropriate screen based on status
+            navigation.navigate('DeliveryScreen', { orderId: activeOrder.orderId });
+        }
+    };
+
+    const requestLocationPermission = useCallback(async () => {
         if (Platform.OS === 'ios') return true;
         try {
             const granted = await PermissionsAndroid.request(
-                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION
+                PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
+                {
+                    title: 'Location Permission',
+                    message: 'Driver App needs access to your location.',
+                    buttonNeutral: 'Ask Me Later',
+                    buttonNegative: 'Cancel',
+                    buttonPositive: 'OK',
+                },
             );
             return granted === PermissionsAndroid.RESULTS.GRANTED;
         } catch (err) {
+            console.warn(err);
             return false;
         }
-    };
-
-    useEffect(() => {
-        const loadDriverData = async () => {
-            const data = await AsyncStorage.getItem('driverData');
-            if (data) {
-                const parsedData = JSON.parse(data);
-                setDriver(parsedData);
-                setIsOnline(parsedData.isOnline || false);
-
-                // Initial check if we have last known location
-                if (parsedData.currentLocation?.coordinates) {
-                    const [lng, lat] = parsedData.currentLocation.coordinates;
-                    fetchAddress(lat, lng);
-                }
-            }
-        };
-        loadDriverData();
     }, []);
 
-    const [updatingLocation, setUpdatingLocation] = useState(false);
+    const handleUpdateLocation = useCallback(async (manual = false) => {
+        if (!driver?._id || !authToken) return; // Don't update if not logged in
 
-    const handleUpdateLocation = async (silently = false) => {
-        if (!isOnline && !silently) {
-            Alert.alert('Offline', 'Please go online to update your location.');
+        setUpdatingLocation(true);
+        const hasPermission = await requestLocationPermission();
+        if (!hasPermission) {
+            setUpdatingLocation(false);
+            if (manual) Alert.alert('Permission Denied', 'Location permission is required.');
             return;
         }
-
-        const hasPermission = await requestLocationPermission();
-        if (!hasPermission) return;
-
-        if (!silently) setUpdatingLocation(true);
 
         Geolocation.getCurrentPosition(
             async (position) => {
                 const { latitude, longitude } = position.coords;
-                // Fetch address first
-                const address = await fetchAddress(latitude, longitude);
+                // console.log('Location:', latitude, longitude);
+
                 try {
-                    // Send both coordinates and address to backend
-                    await apiClient.patch('/driver/location', {
-                        latitude,
-                        longitude,
-                        address: address
-                    });
-                    if (!silently) Alert.alert('Success', 'Location & Address updated.');
-                } catch (err) {
-                    console.error('Failed to sync location:', err);
+                    // Reverse Geocoding
+                    const response = await fetch(
+                        `https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}&key=${GOOGLE_MAPS_API_KEY}`
+                    );
+                    const data = await response.json();
+
+                    if (data.status === 'OK' && data.results.length > 0) {
+                        const address = data.results[0].formatted_address;
+                        if (!isMounted.current || !authToken) return;
+                        setCurrentAddress(address);
+
+                        // Update Backend
+                        await apiClient.patch('/driver/location', {
+                            latitude,
+                            longitude,
+                            address
+                        });
+                    } else {
+                        setCurrentAddress('Address not found');
+                    }
+                } catch (error) {
+                    if (isMounted.current) {
+                        console.error('Geocoding error:', error);
+                        if (manual) Alert.alert('Error', 'Could not fetch address');
+                    }
                 } finally {
-                    setUpdatingLocation(false);
+                    if (isMounted.current) {
+                        setUpdatingLocation(false);
+                    }
                 }
             },
             (error) => {
-                console.error('[Location] GPS Error:', error.message);
+                console.error('Location error:', error);
                 setUpdatingLocation(false);
-                if (!silently) Alert.alert('Error', 'Could not fetch location.');
+                if (manual) Alert.alert('Error', 'Could not get location. Ensure GPS is on.');
             },
             { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
         );
-    };
+    }, [requestLocationPermission, driver?._id, authToken]);
 
-    // Periodic Location Update
-    useEffect(() => {
-        if (!isOnline) return;
+    // ... (existing code)
 
-        const updateLocation = async () => {
-            const hasPermission = await requestLocationPermission();
-            if (!hasPermission) return;
-
-            Geolocation.getCurrentPosition(
-                async (position) => {
-                    const { latitude, longitude } = position.coords;
-                    // Update UI address
-                    fetchAddress(latitude, longitude);
-
-                    try {
-                        console.log(`[Location] Syncing live GPS: ${latitude}, ${longitude}`);
-                        await apiClient.patch('/driver/location', { latitude, longitude });
-                    } catch (err) {
-                        console.error('Failed to sync location to backend:', err);
-                    }
-                },
-                (error) => console.error('[Location] GPS Error:', error.message),
-                { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
-            );
-        };
-
-        const interval = setInterval(updateLocation, 60000); // Every 1 minute
-        updateLocation(); // Initial update
-
-        return () => clearInterval(interval);
-    }, [isOnline, driver]);
-
-    const handleToggleStatus = async () => {
-        const newStatus = !isOnline;
-        try {
-            const response = await apiClient.patch('/driver/status', { isOnline: newStatus });
-            if (response.status === 200) {
-                setIsOnline(newStatus);
-                // Update AsyncStorage to persist status locally
-                const data = await AsyncStorage.getItem('driverData');
-                if (data) {
-                    const parsed = JSON.parse(data);
-                    parsed.isOnline = newStatus;
-                    await AsyncStorage.setItem('driverData', JSON.stringify(parsed));
-                }
-            }
-        } catch (error) {
-            console.error('Error toggling status:', error);
-            Alert.alert('Error', 'Failed to update online status');
-        }
-    };
-
-    useFocusEffect(
-        React.useCallback(() => {
-            fetchWalletBalance();
-            fetchActiveOrder();
-        }, [driver])
-    );
-
-    const fetchWalletBalance = async () => {
+    const fetchWalletBalance = useCallback(async () => {
+        console.log('fetchWalletBalance called, driver._id:', driver?._id);
         if (!driver?._id) return;
 
         setLoadingBalance(true);
         try {
             const response = await apiClient.get(`/driver/wallet/${driver._id}`);
+            console.log('Wallet Response:', JSON.stringify(response.data));
             if (response.data.success) {
+                if (!isMounted.current || !authToken) return;
                 setWalletBalance(response.data.balance);
+                setFloatingCash(response.data.floatingCash || 0);
+                setFloatingCashLimit(response.data.floatingCashLimit || 2000);
+                setIsOnline(response.data.isOnline);
+                setIsPaymentOverdue(response.data.isPaymentOverdue || false);
+                setOverdueCount(response.data.overdueCount || 0);
+                console.log('isOnline set to:', response.data.isOnline);
+                console.log('Payment overdue status:', response.data.isPaymentOverdue);
             }
         } catch (error) {
             console.error('Error fetching wallet balance:', error);
         } finally {
             setLoadingBalance(false);
         }
-    };
+    }, [driver?._id]);
 
-    const fetchActiveOrder = async () => {
-        if (!driver?._id) return;
-        try {
-            const response = await apiClient.get(`/driver/active-order/${driver._id}`);
-            if (response.data.success && response.data.hasActiveOrder) {
-                setActiveOrder(response.data.order);
-            } else {
-                setActiveOrder(null);
-            }
-        } catch (error) {
-            console.error('Error fetching active order:', error);
-        }
-    };
+    useFocusEffect(
+        useCallback(() => {
+            console.log('useFocusEffect triggered');
+            fetchWalletBalance();
+            handleUpdateLocation(false);
+        }, [fetchWalletBalance, handleUpdateLocation])
+    );
 
-    const handleResumeTask = () => {
-        if (!activeOrder) return;
-        const { status } = activeOrder;
-        if (status === 'Shipped') {
-            navigation.navigate('Delivery', { order: activeOrder });
-        } else {
-            navigation.navigate('Pickup', { order: activeOrder });
-        }
-    };
-
-    const handleLogout = async () => {
-        Alert.alert(
-            'Logout',
-            'Are you sure you want to logout?',
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Logout',
-                    style: 'destructive',
-                    onPress: async () => {
-                        await logout();
-                    },
-                },
-            ]
-        );
-    };
+    // ... (existing code)
 
     return (
         <View style={styles.container}>
+            {/* BLOCKING MODAL - Midnight Deadline */}
+            <Modal
+                visible={isPaymentOverdue}
+                transparent={true}
+                animationType="fade"
+            >
+                <View style={styles.blockingOverlay}>
+                    <View style={styles.blockingCard}>
+                        <Text style={styles.blockingTitle}>🚫 Service Blocked</Text>
+                        <Text style={styles.blockingMessage}>
+                            You have {overdueCount} pending cash collection(s) from previous day(s).
+                        </Text>
+                        <Text style={styles.blockingSubMessage}>
+                            Please deposit the cash to the office/admin and ask them to mark payments as "Paid" to resume services.
+                        </Text>
+                        <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#FF5252', marginTop: 20 }]} onPress={logout}>
+                            <Text style={[styles.actionTitle, { textAlign: 'center' }]}>Logout</Text>
+                        </TouchableOpacity>
+                    </View>
+                </View>
+            </Modal>
+
             <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
             <ScrollView
                 style={styles.container}
                 contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}
             >
-                {/* Header Section */}
+                {/* ... (Header Section) ... */}
                 <View style={styles.header}>
                     <View style={styles.profileSection}>
                         <View style={[styles.avatarContainer, { borderColor: isOnline ? '#4CAF50' : '#FF5252' }]}>
@@ -300,24 +244,42 @@ const HomeScreen = ({ navigation }) => {
                     </TouchableOpacity>
                 </View>
 
-                {/* Wallet Section */}
-                <View style={styles.glassCard}>
-                    <View style={[styles.cardContent, { backgroundColor: 'rgba(76, 175, 80, 0.15)' }]}>
-                        <Text style={styles.cardLabel}>Total Earnings</Text>
-                        <View style={styles.amountContainer}>
-                            <Text style={styles.currency}>₹</Text>
-                            <Text style={styles.amount}>
-                                {loadingBalance ? '---' : walletBalance.toFixed(2)}
-                            </Text>
+                {/* Wallet & Floating Cash Section Row */}
+                <View style={{ flexDirection: 'row', gap: 10 }}>
+                    {/* Wallet Card */}
+                    <View style={[styles.glassCard, { flex: 1 }]}>
+                        <View style={[styles.cardContent, { backgroundColor: 'rgba(76, 175, 80, 0.15)', padding: 15, minHeight: 140 }]}>
+                            <Text style={styles.cardLabel}>Earnings</Text>
+                            <View style={[styles.amountContainer, { marginBottom: 10 }]}>
+                                <Text style={[styles.currency, { fontSize: 18 }]}>₹</Text>
+                                <Text style={[styles.amount, { fontSize: 32 }]}>
+                                    {loadingBalance ? '--' : walletBalance.toFixed(0)}
+                                </Text>
+                            </View>
+                            <Text style={[styles.footerText, { fontSize: 10 }]}>Available Balance</Text>
                         </View>
-                        <View style={styles.cardFooter}>
-                            <Text style={styles.footerText}>Available Balance</Text>
-                            <View style={styles.trendingContainer}>
-                                <Text style={styles.trendingText}>↗ 12%</Text>
+                    </View>
+
+                    {/* Floating Cash Card */}
+                    <View style={[styles.glassCard, { flex: 1 }]}>
+                        <View style={[styles.cardContent, { backgroundColor: 'rgba(255, 82, 82, 0.15)', padding: 15, minHeight: 140 }]}>
+                            <Text style={styles.cardLabel}>Floating Cash</Text>
+                            <View style={[styles.amountContainer, { marginBottom: 10 }]}>
+                                <Text style={[styles.currency, { fontSize: 18 }]}>₹</Text>
+                                <Text style={[styles.amount, { fontSize: 32 }]}>
+                                    {loadingBalance ? '--' : floatingCash.toFixed(0)}
+                                </Text>
+                            </View>
+                            <Text style={[styles.footerText, { fontSize: 10 }]}>Limit: ₹{floatingCashLimit}</Text>
+                            <View style={{ height: 4, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', marginTop: 5, borderRadius: 2 }}>
+                                <View style={{
+                                    height: '100%',
+                                    width: `${Math.min((floatingCash / floatingCashLimit) * 100, 100)}%`,
+                                    backgroundColor: floatingCash > floatingCashLimit * 0.9 ? '#FF5252' : '#FFA000',
+                                    borderRadius: 2
+                                }} />
                             </View>
                         </View>
-                        {/* Decorative curve */}
-                        <View style={styles.decorationCurve} />
                     </View>
                 </View>
 
@@ -377,7 +339,7 @@ const HomeScreen = ({ navigation }) => {
 
                     <TouchableOpacity
                         style={[styles.actionButton, { backgroundColor: '#2E1A1A' }]}
-                        onPress={handleLogout}
+                        onPress={logout}
                     >
                         <View style={[styles.actionIconBg, { backgroundColor: '#FF5252' }]}>
                             <Text style={styles.actionIcon}>🚪</Text>
@@ -417,7 +379,7 @@ const HomeScreen = ({ navigation }) => {
 
                         <TouchableOpacity
                             style={[styles.fetchButton, { opacity: updatingLocation ? 0.7 : 1 }]}
-                            onPress={() => handleUpdateLocation(false)}
+                            onPress={() => handleUpdateLocation(true)}
                             disabled={updatingLocation}
                         >
                             {updatingLocation ? (
@@ -438,9 +400,45 @@ const styles = StyleSheet.create({
         flex: 1,
         backgroundColor: '#0A0A0A', // Deep dark theme
     },
+    // BLOCKING MODAL STYLES
+    blockingOverlay: {
+        flex: 1,
+        backgroundColor: 'rgba(0,0,0,0.9)',
+        justifyContent: 'center',
+        padding: 20
+    },
+    blockingCard: {
+        backgroundColor: '#1A1A1A',
+        padding: 30,
+        borderRadius: 20,
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#FF5252'
+    },
+    blockingTitle: {
+        fontSize: 24,
+        fontWeight: 'bold',
+        color: '#FF5252',
+        marginBottom: 10
+    },
+    blockingMessage: {
+        fontSize: 16,
+        color: '#fff',
+        textAlign: 'center',
+        marginBottom: 10,
+        lineHeight: 24
+    },
+    blockingSubMessage: {
+        fontSize: 14,
+        color: '#888',
+        textAlign: 'center',
+        marginBottom: 20
+    },
+
     scrollContent: {
         padding: 20,
     },
+    // ... (rest of existing styles)
     header: {
         flexDirection: 'row',
         justifyContent: 'space-between',
@@ -448,6 +446,7 @@ const styles = StyleSheet.create({
         marginBottom: 30,
     },
     profileSection: {
+        flex: 1,
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
@@ -692,7 +691,7 @@ const styles = StyleSheet.create({
         borderRadius: 12,
         borderWidth: 1,
         borderColor: 'rgba(255, 255, 255, 0.1)',
-        maxWidth: width * 0.6,
+        maxWidth: width * 0.5,
     },
     locationText: {
         fontSize: 10,

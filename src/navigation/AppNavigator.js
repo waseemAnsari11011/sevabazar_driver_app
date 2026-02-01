@@ -169,7 +169,31 @@ const AppNavigator = () => {
     return (
         <>
             <NavigationContainer ref={navigationRef}>
-                <Stack.Navigator>
+                <Stack.Navigator
+                    screenOptions={{
+                        headerStyle: {
+                            height: 60, // Increased height for better breathing room
+                            elevation: 0,
+                            shadowOpacity: 0,
+                            backgroundColor: '#fff',
+                            borderBottomWidth: 1,
+                            borderBottomColor: '#f0f0f0',
+                        },
+                        headerTitleStyle: {
+                            fontSize: 18,
+                            fontWeight: 'bold',
+                            color: '#333',
+                        },
+                        headerTitleAlign: 'left',
+                        headerBackTitleVisible: false,
+                        headerLeftContainerStyle: {
+                            paddingLeft: 0,
+                        },
+                        headerTitleContainerStyle: {
+                            marginLeft: -10,
+                        },
+                    }}
+                >
                     {authToken == null ? (
                         <>
                             <Stack.Screen

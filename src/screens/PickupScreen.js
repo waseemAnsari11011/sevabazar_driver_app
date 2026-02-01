@@ -71,62 +71,135 @@ const PickupScreen = ({ route, navigation }) => {
         }
     };
 
+    const formattedDate = (order.createdAt && !isNaN(new Date(order.createdAt)))
+        ? new Date(order.createdAt).toLocaleDateString('en-US', {
+            month: 'long',
+            day: 'numeric',
+            year: 'numeric',
+            hour: 'numeric',
+            minute: 'numeric',
+            hour12: true
+        })
+        : 'Date not available';
+
     return (
         <ScrollView style={styles.container}>
-            <View style={styles.header}>
-                <Text style={styles.headerText}>Pickup Mode</Text>
-                <Text style={styles.orderIdText}>Order #{order.orderId}</Text>
-            </View>
-
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Vendor Location</Text>
                 <View style={styles.card}>
                     <Text style={styles.vendorNameText}>{vendorName}</Text>
                     <Text style={styles.addressText}>{vendorAddress}</Text>
                 </View>
-
-                <TouchableOpacity
-                    style={styles.mapsButton}
-                    onPress={openGoogleMaps}
-                >
-                    <Text style={styles.mapsButtonText}>📍 Open in Google Maps</Text>
-                </TouchableOpacity>
             </View>
 
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Order Items</Text>
                 <View style={styles.card}>
+                    {/* Order Header */}
+                    <View style={styles.orderHeader}>
+                        <Text style={styles.orderHeaderText}>🆔 Order ID: {order.orderId}</Text>
+                        <Text style={styles.orderHeaderText}>📅 Ordered On: {formattedDate}</Text>
+                    </View>
+                    <View style={styles.divider} />
+
                     {rawData.items && rawData.items.length > 0 ? (
-                        rawData.items.map((item, index) => (
-                            <View key={index} style={styles.itemRow}>
-                                {item.image ? (
-                                    <Image source={{ uri: item.image }} style={styles.itemImage} />
-                                ) : (
-                                    <View style={[styles.itemImage, styles.noImagePlaceholder]}>
-                                        <Text style={styles.noImageText}>No Img</Text>
+                        rawData.items.map((item, index) => {
+                            // Extract image safely
+                            const productImage = item.image || 'https://via.placeholder.com/60';
+                            // Calculate item total if not present (fallback)
+                            const itemTotal = item.totalAmount || (item.price * item.quantity);
+                            const discount = item.discount || 0;
+
+                            return (
+                                <View key={index} style={styles.productContainer}>
+                                    <View style={styles.productDetailsContainer}>
+                                        <Image
+                                            source={{ uri: productImage }}
+                                            style={styles.productImage}
+                                            resizeMode="cover"
+                                        />
+                                        <View style={styles.productInfo}>
+                                            <Text style={styles.productName}>📦 Product: {item.name}</Text>
+
+                                            <Text style={styles.productDetails}>⬇️ Quantity: {item.quantity}</Text>
+                                            <Text style={styles.productDetails}>💲 Price: ₹{item.price}</Text>
+                                            <Text style={styles.productDetails}>% Discount: {discount}%</Text>
+                                            <Text style={styles.productDetails}>🔢 Total Amount: ₹{itemTotal}</Text>
+
+                                            {/* Variations */}
+                                            {item.variations && item.variations.length > 0 && (
+                                                <View style={{ marginTop: 4 }}>
+                                                    {item.variations.map((v, vIndex) => (
+                                                        <View key={vIndex}>
+                                                            {v.attributes?.map((a, aIndex) => (
+                                                                <Text key={aIndex} style={styles.productDetails}>
+                                                                    🏷️ {a.name}: {a.value}
+                                                                </Text>
+                                                            ))}
+                                                        </View>
+                                                    ))}
+                                                </View>
+                                            )}
+                                        </View>
                                     </View>
-                                )}
-                                <View style={styles.itemInfo}>
-                                    <Text style={styles.itemName}>{item.name} x{item.quantity}</Text>
-                                    {item.variations && item.variations.length > 0 && (
-                                        <Text style={styles.itemMeta}>
-                                            {item.variations.map(v =>
-                                                v.attributes?.map(a => `${a.name}: ${a.value}`).join(', ')
-                                            ).filter(Boolean).join(' | ')}
-                                        </Text>
-                                    )}
                                 </View>
-                                <Text style={styles.itemPrice}>₹{item.totalAmount || (item.price * item.quantity)}</Text>
-                            </View>
-                        ))
+                            );
+                        })
                     ) : (
                         <Text style={styles.noItemsText}>No items data available</Text>
                     )}
-                    <View style={styles.divider} />
-                    <View style={styles.totalRow}>
-                        <Text style={styles.totalLabel}>Total Bill:</Text>
-                        <Text style={styles.totalValue}>₹{rawData.totalAmount || 'N/A'}</Text>
-                    </View>
+
+                    {/* Payment Breakdown Calculation and Display */}
+                    {(() => {
+                        let grossTotal = 0;
+                        let itemTotal = 0;
+
+                        // Calculate totals from items
+                        if (rawData.items) {
+                            rawData.items.forEach(item => {
+                                const pPrice = item.price || 0;
+                                const pQty = item.quantity || 1;
+                                const pTotal = item.totalAmount || (pPrice * pQty);
+
+                                grossTotal += (pPrice * pQty);
+                                itemTotal += pTotal;
+                            });
+                        }
+
+                        const discountTotal = grossTotal - itemTotal;
+                        const deliveryFee = rawData.deliveryCharge || 0;
+                        const shippingFee = rawData.shippingFee || 0;
+                        const grandTotal = itemTotal + deliveryFee + shippingFee;
+
+                        return (
+                            <View style={styles.breakdownContainer}>
+                                <Text style={styles.breakdownTitle}>Payment Details</Text>
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.breakdownLabel}>MRP Total</Text>
+                                    <Text style={styles.breakdownValue}>₹{grossTotal.toFixed(2)}</Text>
+                                </View>
+                                {discountTotal > 0 && (
+                                    <View style={styles.breakdownRow}>
+                                        <Text style={styles.breakdownLabel}>Discount</Text>
+                                        <Text style={[styles.breakdownValue, { color: 'green' }]}>-₹{discountTotal.toFixed(2)}</Text>
+                                    </View>
+                                )}
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.breakdownLabel}>Delivery Fee</Text>
+                                    <Text style={styles.breakdownValue}>₹{deliveryFee.toFixed(2)}</Text>
+                                </View>
+                                {/* Optional: Distance info if needed, similar to screenshot */}
+                                <View style={styles.breakdownRow}>
+                                    <Text style={styles.breakdownLabel}>Shipping Fee</Text>
+                                    <Text style={styles.breakdownValue}>₹{shippingFee.toFixed(2)}</Text>
+                                </View>
+                                <View style={[styles.breakdownRow, styles.totalRow]}>
+                                    <Text style={styles.totalLabel}>Grand Total</Text>
+                                    <Text style={styles.totalValue}>₹{grandTotal.toFixed(2)}</Text>
+                                </View>
+                            </View>
+                        );
+                    })()}
                 </View>
             </View>
 
@@ -144,13 +217,6 @@ const PickupScreen = ({ route, navigation }) => {
                 </View>
             </View>
 
-            <View style={styles.section}>
-                <Text style={styles.instructionText}>
-                    📌 Reach the vendor location and collect the order.
-                    {'\n'}🔢 Ask the vendor for the 4-digit pickup OTP.
-                    {'\n'}✅ Verify pickup to proceed to delivery.
-                </Text>
-            </View>
 
             <TouchableOpacity
                 style={styles.verifyButton}
@@ -197,7 +263,9 @@ const styles = StyleSheet.create({
         marginTop: 4,
     },
     section: {
-        padding: 16,
+        paddingHorizontal: 16,
+        paddingBottom: 16,
+        paddingTop: 8,
     },
     sectionTitle: {
         fontSize: 18,
@@ -258,40 +326,38 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         color: '#4CAF50',
     },
-    itemRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 8,
-    },
-    itemInfo: {
-        flex: 1,
-    },
-    itemName: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: '500',
-    },
-    itemMeta: {
-        fontSize: 14,
-        color: '#666',
-    },
-    itemPrice: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: 'bold',
-    },
-    itemImage: {
-        width: 50,
-        height: 50,
+    productContainer: {
+        marginBottom: 12,
+        padding: 8,
+        backgroundColor: '#f9f9f9',
         borderRadius: 8,
-        marginRight: 12,
-    },
-    noImagePlaceholder: {
-        backgroundColor: '#f0f0f0',
-        justifyContent: 'center',
-        alignItems: 'center',
         borderWidth: 1,
         borderColor: '#eee',
+    },
+    productDetailsContainer: {
+        flexDirection: 'row',
+        alignItems: 'flex-start',
+    },
+    productImage: {
+        width: 70,
+        height: 70,
+        borderRadius: 8,
+        marginRight: 12,
+        backgroundColor: '#ddd',
+    },
+    productInfo: {
+        flex: 1,
+    },
+    productName: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 4,
+    },
+    productDetails: {
+        fontSize: 13,
+        color: '#666',
+        marginBottom: 2,
     },
     noImageText: {
         fontSize: 10,
@@ -345,6 +411,100 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+    // New Breakdown Styles
+    breakdownContainer: {
+        marginTop: 10,
+        paddingTop: 10,
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+    },
+    breakdownTitle: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        marginBottom: 8,
+        color: '#333',
+    },
+    breakdownRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 4,
+    },
+    breakdownLabel: {
+        fontSize: 14,
+        color: '#666',
+    },
+    breakdownValue: {
+        fontSize: 14,
+        color: '#333',
+        fontWeight: '500',
+    },
+    totalRow: {
+        marginTop: 8,
+        paddingTop: 8,
+        borderTopWidth: 1,
+        borderTopColor: '#eee',
+    },
+    totalLabel: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    totalValue: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#ff6600',
+    },
+    orderHeader: {
+        marginBottom: 8,
+    },
+    orderHeaderText: {
+        fontSize: 14,
+        fontWeight: 'bold',
+        color: '#333',
+        marginBottom: 4,
+    },
+    customerHeader: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        padding: 12,
+        backgroundColor: '#fcfcfc',
+        borderTopLeftRadius: 12,
+        borderTopRightRadius: 12,
+    },
+    customerNameLarge: {
+        fontSize: 18,
+        fontWeight: 'bold',
+        color: '#333',
+    },
+    phoneBadge: {
+        backgroundColor: '#E3F2FD',
+        paddingHorizontal: 10,
+        paddingVertical: 6,
+        borderRadius: 20,
+        borderWidth: 1,
+        borderColor: '#2196F3',
+    },
+    phoneBadgeText: {
+        color: '#2196F3',
+        fontWeight: 'bold',
+        fontSize: 13,
+    },
+    cardDivider: {
+        height: 1,
+        backgroundColor: '#eee',
+    },
+    addressTitle: {
+        fontSize: 12,
+        color: '#666',
+        fontWeight: 'bold',
+        marginBottom: 4,
+    },
+    addressTextLarge: {
+        fontSize: 14,
+        color: '#333',
+        lineHeight: 20,
     },
 });
 

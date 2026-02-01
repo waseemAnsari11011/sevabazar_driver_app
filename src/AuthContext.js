@@ -6,13 +6,18 @@ const AuthContext = createContext();
 
 export const AuthProvider = ({ children }) => {
     const [authToken, setAuthToken] = useState(null);
+    const [driver, setDriver] = useState(null);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
         const loadToken = async () => {
             try {
                 const token = await AsyncStorage.getItem('driverToken');
+                const driverData = await AsyncStorage.getItem('driverData');
                 setAuthToken(token);
+                if (driverData) {
+                    setDriver(JSON.parse(driverData));
+                }
             } catch (e) {
                 console.error('Failed to load token', e);
             } finally {
@@ -26,6 +31,7 @@ export const AuthProvider = ({ children }) => {
         await AsyncStorage.setItem('driverToken', token);
         await AsyncStorage.setItem('driverData', JSON.stringify(driverData));
         setAuthToken(token);
+        setDriver(driverData);
         // Connect socket
         await socketService.connect();
     };
@@ -40,11 +46,12 @@ export const AuthProvider = ({ children }) => {
         }
         await AsyncStorage.multiRemove(['driverToken', 'driverData']);
         setAuthToken(null);
+        setDriver(null);
         socketService.disconnect();
     };
 
     return (
-        <AuthContext.Provider value={{ authToken, loading, login, logout }}>
+        <AuthContext.Provider value={{ authToken, driver, loading, login, logout }}>
             {children}
         </AuthContext.Provider>
     );

@@ -12,6 +12,19 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 
+const formatAddress = (addr) => {
+    if (!addr) return 'N/A';
+    if (typeof addr === 'string') return addr;
+
+    const parts = [
+        addr.landmark,
+        addr.addressLine2,
+        addr.postalCode
+    ].filter(Boolean);
+
+    return parts.length > 0 ? parts.join(', ') : 'N/A';
+};
+
 const MyOrdersScreen = ({ navigation }) => {
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
@@ -126,7 +139,7 @@ const MyOrdersScreen = ({ navigation }) => {
                     <Text style={styles.vendorName}>🏪 {item.rawOfferData.vendorName || 'Vendor'}</Text>
                     <Text style={styles.customerName}>👤 {item.rawOfferData.customerName || 'Customer'}</Text>
                 </View>
-                <Text style={styles.address}>📍 {item.rawOfferData.shippingAddress?.address || 'N/A'}</Text>
+                <Text style={styles.address}>📍 {item.rawOfferData.shippingAddress?.address || formatAddress(item.rawOfferData.shippingAddress)}</Text>
                 <View style={styles.statsRow}>
                     <Text style={styles.stat}>📏 {item.totalDistance} km</Text>
                     <Text style={styles.stat}>💰 ₹{item.earning}</Text>

@@ -7,6 +7,7 @@ import {
     StyleSheet,
     Dimensions,
 } from 'react-native';
+import { formatCurrency } from '../utils/currency';
 
 const { width, height } = Dimensions.get('window');
 
@@ -21,7 +22,7 @@ const OrderOfferModal = ({ visible, orderData, onAccept, onReject }) => {
         ? `${totalDistance} km`
         : 'Calculating...';
 
-    const displayEarning = (typeof earning === 'number' && earning >= 0) ? `₹${earning}` : '---';
+    const displayEarning = (typeof earning === 'number' && earning >= 0) ? formatCurrency(earning) : '---';
 
     return (
         <Modal
@@ -58,7 +59,7 @@ const OrderOfferModal = ({ visible, orderData, onAccept, onReject }) => {
                         {orderData.rawOfferData?.totalAmount && (
                             <View style={styles.billBox}>
                                 <Text style={styles.billLabel}>Order Total Bill:</Text>
-                                <Text style={styles.billValue}>₹{orderData.rawOfferData.totalAmount}</Text>
+                                <Text style={styles.billValue}>{formatCurrency(orderData.rawOfferData.totalAmount)}</Text>
                             </View>
                         )}
 

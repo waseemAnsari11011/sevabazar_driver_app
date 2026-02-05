@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
+import { formatCurrency } from '../utils/currency';
 
 const EarningsHistoryScreen = () => {
     const [orders, setOrders] = useState([]);
@@ -47,7 +48,7 @@ const EarningsHistoryScreen = () => {
             </View>
             <View style={styles.cardFooter}>
                 <Text style={styles.earningLabel}>Earned:</Text>
-                <Text style={styles.earningValue}>₹{item.earning.toFixed(2)}</Text>
+                <Text style={styles.earningValue}>{formatCurrency(item.earning)}</Text>
             </View>
         </View>
     );

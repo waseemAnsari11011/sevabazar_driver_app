@@ -1,9 +1,7 @@
 import axios from 'axios';
 
-// Replace with your machine's IP address if testing on a real device
-const BASE_URL = 'http://10.0.2.2:8000'; // For Android Emulator
-// const BASE_URL = 'http://localhost:8000'; // For iOS Simulator
-// const BASE_URL = 'https://server.sevabazar.com';
+import { BASE_URL } from './client';
+
 const loginDriver = async (phone, password) => {
     try {
         const response = await axios.post(`${BASE_URL}/driver/login`, {

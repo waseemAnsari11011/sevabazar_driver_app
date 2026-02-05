@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
+import { formatCurrency } from '../utils/currency';
 
 const formatAddress = (addr) => {
     if (!addr) return 'N/A';
@@ -142,9 +143,9 @@ const MyOrdersScreen = ({ navigation }) => {
                 <Text style={styles.address}>📍 {item.rawOfferData.shippingAddress?.address || formatAddress(item.rawOfferData.shippingAddress)}</Text>
                 <View style={styles.statsRow}>
                     <Text style={styles.stat}>📏 {item.totalDistance} km</Text>
-                    <Text style={styles.stat}>💰 ₹{item.earning}</Text>
+                    <Text style={styles.stat}>💰 {formatCurrency(item.earning)}</Text>
                     {item.rawOfferData.totalAmount && (
-                        <Text style={styles.billStat}>🎫 ₹{item.rawOfferData.totalAmount}</Text>
+                        <Text style={styles.billStat}>🎫 {formatCurrency(item.rawOfferData.totalAmount)}</Text>
                     )}
                 </View>
             </View>

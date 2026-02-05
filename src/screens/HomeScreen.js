@@ -18,7 +18,8 @@ import { useFocusEffect } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../AuthContext';
 import apiClient from '../api/client';
-import Geolocation from '@react-native-community/geolocation';
+import Geolocation from 'react-native-geolocation-service';
+import { formatCurrency } from '../utils/currency';
 
 const { width } = Dimensions.get('window');
 
@@ -47,6 +48,21 @@ const HomeScreen = ({ navigation }) => {
         };
     }, []);
 
+    // Force offline if payment is overdue
+    useEffect(() => {
+        if (isPaymentOverdue && isOnline) {
+            const forceOffline = async () => {
+                try {
+                    setIsOnline(false); // Force offline locally
+                    await apiClient.patch('/driver/status', { isOnline: false });
+                } catch (error) {
+                    console.error("Failed to force offline due to overdue payment:", error);
+                }
+            };
+            forceOffline();
+        }
+    }, [isPaymentOverdue, isOnline]);
+
     // useFocusEffect calling fetchWalletBalance and handleUpdateLocation is moved below handleUpdateLocation definition
 
     const handleToggleStatus = async () => {
@@ -54,6 +70,9 @@ const HomeScreen = ({ navigation }) => {
         setIsOnline(newStatus); // Optimistic update
         try {
             await apiClient.patch('/driver/status', { isOnline: newStatus });
+            if (newStatus) {
+                fetchActiveOrder();
+            }
         } catch (error) {
             console.error('Error updating status:', error);
             setIsOnline(!newStatus); // Revert on error
@@ -64,24 +83,25 @@ const HomeScreen = ({ navigation }) => {
     const handleResumeTask = () => {
         if (activeOrder) {
             // Navigate to appropriate screen based on status
-            navigation.navigate('DeliveryScreen', { orderId: activeOrder.orderId });
+            if (activeOrder.status === 'Shipped') {
+                navigation.navigate('Delivery', { order: activeOrder });
+            } else {
+                navigation.navigate('Pickup', { order: activeOrder });
+            }
         }
     };
 
     const requestLocationPermission = useCallback(async () => {
         if (Platform.OS === 'ios') return true;
         try {
-            const granted = await PermissionsAndroid.request(
+            const granted = await PermissionsAndroid.requestMultiple([
                 PermissionsAndroid.PERMISSIONS.ACCESS_FINE_LOCATION,
-                {
-                    title: 'Location Permission',
-                    message: 'Driver App needs access to your location.',
-                    buttonNeutral: 'Ask Me Later',
-                    buttonNegative: 'Cancel',
-                    buttonPositive: 'OK',
-                },
+                PermissionsAndroid.PERMISSIONS.ACCESS_COARSE_LOCATION,
+            ]);
+            return (
+                granted['android.permission.ACCESS_FINE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED &&
+                granted['android.permission.ACCESS_COARSE_LOCATION'] === PermissionsAndroid.RESULTS.GRANTED
             );
-            return granted === PermissionsAndroid.RESULTS.GRANTED;
         } catch (err) {
             console.warn(err);
             return false;
@@ -141,11 +161,33 @@ const HomeScreen = ({ navigation }) => {
                 setUpdatingLocation(false);
                 if (manual) Alert.alert('Error', 'Could not get location. Ensure GPS is on.');
             },
-            { enableHighAccuracy: true, timeout: 15000, maximumAge: 10000 }
+            {
+                enableHighAccuracy: true,
+                timeout: 30000,
+                maximumAge: 10000,
+                showLocationDialog: true,
+                forceRequestLocation: true
+            }
         );
     }, [requestLocationPermission, driver?._id, authToken]);
 
     // ... (existing code)
+
+    const fetchActiveOrder = useCallback(async () => {
+        if (!driver?._id) return;
+        try {
+            const response = await apiClient.get(`/driver/active-order/${driver._id}`);
+            if (response.data.success && response.data.hasActiveOrder) {
+                if (!isMounted.current || !authToken) return;
+                setActiveOrder(response.data.order);
+            } else {
+                setActiveOrder(null);
+            }
+        } catch (error) {
+            console.error('Error fetching active order:', error);
+            setActiveOrder(null);
+        }
+    }, [driver?._id, authToken]);
 
     const fetchWalletBalance = useCallback(async () => {
         console.log('fetchWalletBalance called, driver._id:', driver?._id);
@@ -177,8 +219,9 @@ const HomeScreen = ({ navigation }) => {
         useCallback(() => {
             console.log('useFocusEffect triggered');
             fetchWalletBalance();
+            fetchActiveOrder();
             handleUpdateLocation(false);
-        }, [fetchWalletBalance, handleUpdateLocation])
+        }, [fetchWalletBalance, fetchActiveOrder, handleUpdateLocation])
     );
 
     // ... (existing code)
@@ -251,9 +294,8 @@ const HomeScreen = ({ navigation }) => {
                         <View style={[styles.cardContent, { backgroundColor: 'rgba(76, 175, 80, 0.15)', padding: 15, minHeight: 140 }]}>
                             <Text style={styles.cardLabel}>Earnings</Text>
                             <View style={[styles.amountContainer, { marginBottom: 10 }]}>
-                                <Text style={[styles.currency, { fontSize: 18 }]}>₹</Text>
                                 <Text style={[styles.amount, { fontSize: 32 }]}>
-                                    {loadingBalance ? '--' : walletBalance.toFixed(0)}
+                                    {loadingBalance ? '--' : formatCurrency(walletBalance).replace('₹', '')}
                                 </Text>
                             </View>
                             <Text style={[styles.footerText, { fontSize: 10 }]}>Available Balance</Text>
@@ -265,12 +307,11 @@ const HomeScreen = ({ navigation }) => {
                         <View style={[styles.cardContent, { backgroundColor: 'rgba(255, 82, 82, 0.15)', padding: 15, minHeight: 140 }]}>
                             <Text style={styles.cardLabel}>Floating Cash</Text>
                             <View style={[styles.amountContainer, { marginBottom: 10 }]}>
-                                <Text style={[styles.currency, { fontSize: 18 }]}>₹</Text>
                                 <Text style={[styles.amount, { fontSize: 32 }]}>
-                                    {loadingBalance ? '--' : floatingCash.toFixed(0)}
+                                    {loadingBalance ? '--' : formatCurrency(floatingCash).replace('₹', '')}
                                 </Text>
                             </View>
-                            <Text style={[styles.footerText, { fontSize: 10 }]}>Limit: ₹{floatingCashLimit}</Text>
+                            <Text style={[styles.footerText, { fontSize: 10 }]}>Limit: {formatCurrency(floatingCashLimit)}</Text>
                             <View style={{ height: 4, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', marginTop: 5, borderRadius: 2 }}>
                                 <View style={{
                                     height: '100%',

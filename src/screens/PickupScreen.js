@@ -13,6 +13,7 @@ import {
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import OTPInputModal from '../components/OTPInputModal';
+import { formatCurrency } from '../utils/currency';
 
 const PickupScreen = ({ route, navigation }) => {
     const { order } = route.params;
@@ -122,9 +123,9 @@ const PickupScreen = ({ route, navigation }) => {
                                             <Text style={styles.productName}>📦 Product: {item.name}</Text>
 
                                             <Text style={styles.productDetails}>⬇️ Quantity: {item.quantity}</Text>
-                                            <Text style={styles.productDetails}>💲 Price: ₹{item.price}</Text>
+                                            <Text style={styles.productDetails}>💲 Price: {formatCurrency(item.price)}</Text>
                                             <Text style={styles.productDetails}>% Discount: {discount}%</Text>
-                                            <Text style={styles.productDetails}>🔢 Total Amount: ₹{itemTotal}</Text>
+                                            <Text style={styles.productDetails}>🔢 Total Amount: {formatCurrency(itemTotal)}</Text>
 
                                             {/* Variations */}
                                             {item.variations && item.variations.length > 0 && (
@@ -176,26 +177,26 @@ const PickupScreen = ({ route, navigation }) => {
                                 <Text style={styles.breakdownTitle}>Payment Details</Text>
                                 <View style={styles.breakdownRow}>
                                     <Text style={styles.breakdownLabel}>MRP Total</Text>
-                                    <Text style={styles.breakdownValue}>₹{grossTotal.toFixed(2)}</Text>
+                                    <Text style={styles.breakdownValue}>{formatCurrency(grossTotal)}</Text>
                                 </View>
                                 {discountTotal > 0 && (
                                     <View style={styles.breakdownRow}>
                                         <Text style={styles.breakdownLabel}>Discount</Text>
-                                        <Text style={[styles.breakdownValue, { color: 'green' }]}>-₹{discountTotal.toFixed(2)}</Text>
+                                        <Text style={[styles.breakdownValue, { color: 'green' }]}>-{formatCurrency(discountTotal)}</Text>
                                     </View>
                                 )}
                                 <View style={styles.breakdownRow}>
                                     <Text style={styles.breakdownLabel}>Delivery Fee</Text>
-                                    <Text style={styles.breakdownValue}>₹{deliveryFee.toFixed(2)}</Text>
+                                    <Text style={styles.breakdownValue}>{formatCurrency(deliveryFee)}</Text>
                                 </View>
                                 {/* Optional: Distance info if needed, similar to screenshot */}
                                 <View style={styles.breakdownRow}>
                                     <Text style={styles.breakdownLabel}>Shipping Fee</Text>
-                                    <Text style={styles.breakdownValue}>₹{shippingFee.toFixed(2)}</Text>
+                                    <Text style={styles.breakdownValue}>{formatCurrency(shippingFee)}</Text>
                                 </View>
                                 <View style={[styles.breakdownRow, styles.totalRow]}>
                                     <Text style={styles.totalLabel}>Grand Total</Text>
-                                    <Text style={styles.totalValue}>₹{grandTotal.toFixed(2)}</Text>
+                                    <Text style={styles.totalValue}>{formatCurrency(grandTotal)}</Text>
                                 </View>
                             </View>
                         );
@@ -212,7 +213,7 @@ const PickupScreen = ({ route, navigation }) => {
                     </View>
                     <View style={styles.detailRow}>
                         <Text style={styles.detailLabel}>Your Earning:</Text>
-                        <Text style={styles.earningValue}>₹{order.earning}</Text>
+                        <Text style={styles.earningValue}>{formatCurrency(order.earning)}</Text>
                     </View>
                 </View>
             </View>

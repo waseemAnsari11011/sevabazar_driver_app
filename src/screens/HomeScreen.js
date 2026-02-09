@@ -33,6 +33,7 @@ const HomeScreen = ({ navigation }) => {
     const [isOnline, setIsOnline] = useState(false);
     const [isPaymentOverdue, setIsPaymentOverdue] = useState(false);
     const [overdueCount, setOverdueCount] = useState(0);
+    const [overdueAmount, setOverdueAmount] = useState(0);
     const [currentAddress, setCurrentAddress] = useState('Fetching location...');
     const [showLocationModal, setShowLocationModal] = useState(false);
     const [walletBalance, setWalletBalance] = useState(0);
@@ -55,11 +56,16 @@ const HomeScreen = ({ navigation }) => {
                 try {
                     setIsOnline(false); // Force offline locally
                     await apiClient.patch('/driver/status', { isOnline: false });
+                    // Save flag that driver was blocked and should be recovered later
+                    await AsyncStorage.setItem('isWasBlocked', 'true');
                 } catch (error) {
                     console.error("Failed to force offline due to overdue payment:", error);
                 }
             };
             forceOffline();
+        } else if (isPaymentOverdue && !isOnline) {
+            // Even if already offline, if they are blocked, mark it for recovery
+            AsyncStorage.setItem('isWasBlocked', 'true');
         }
     }, [isPaymentOverdue, isOnline]);
 
@@ -77,6 +83,26 @@ const HomeScreen = ({ navigation }) => {
             console.error('Error updating status:', error);
             setIsOnline(!newStatus); // Revert on error
             Alert.alert('Error', 'Could not update status');
+        }
+    };
+
+    const handleRefreshStatus = async () => {
+        setLoadingBalance(true);
+        try {
+            const data = await fetchWalletBalance();
+            if (data && data.overdueCount === 0) {
+                // Auto-Online
+                await apiClient.patch('/driver/status', { isOnline: true });
+                setIsOnline(true);
+                Alert.alert("Success", "Payments Cleared! You are now Online.");
+            } else {
+                Alert.alert("Pending", `You still have ${data?.overdueCount || 0} pending payments (Total: ${formatCurrency(data?.overdueAmount || 0)}). Please clear them to resume.`);
+            }
+        } catch (error) {
+            console.error('Refresh status error:', error);
+            Alert.alert("Error", "Could not refresh status. Please try again.");
+        } finally {
+            setLoadingBalance(false);
         }
     };
 
@@ -205,8 +231,22 @@ const HomeScreen = ({ navigation }) => {
                 setIsOnline(response.data.isOnline);
                 setIsPaymentOverdue(response.data.isPaymentOverdue || false);
                 setOverdueCount(response.data.overdueCount || 0);
+                setOverdueAmount(response.data.overdueAmount || 0);
+
+                // Smart Recovery Logic: If was blocked and now clear, auto-online
+                if (response.data.overdueCount === 0) {
+                    const wasBlocked = await AsyncStorage.getItem('isWasBlocked');
+                    if (wasBlocked === 'true') {
+                        await apiClient.patch('/driver/status', { isOnline: true });
+                        setIsOnline(true);
+                        await AsyncStorage.removeItem('isWasBlocked');
+                        Alert.alert("Welcome Back!", "Your payments are cleared. You are now Online and ready for orders.");
+                    }
+                }
+
                 console.log('isOnline set to:', response.data.isOnline);
                 console.log('Payment overdue status:', response.data.isPaymentOverdue);
+                return response.data;
             }
         } catch (error) {
             console.error('Error fetching wallet balance:', error);
@@ -236,16 +276,36 @@ const HomeScreen = ({ navigation }) => {
             >
                 <View style={styles.blockingOverlay}>
                     <View style={styles.blockingCard}>
-                        <Text style={styles.blockingTitle}>🚫 Service Blocked</Text>
-                        <Text style={styles.blockingMessage}>
-                            You have {overdueCount} pending cash collection(s) from previous day(s).
+                        <Text style={[styles.blockingTitle, { fontSize: 48 }]}>🚫</Text>
+
+                        <Text style={[styles.blockingMessage, { fontSize: 24, color: '#FF5252', marginVertical: 10 }]}>
+                            Pending: {formatCurrency(overdueAmount)}
+                        </Text>
+                        <Text style={[styles.blockingSubMessage, { color: '#fff', marginBottom: 15 }]}>
+                            Total: {overdueCount} {overdueCount === 1 ? 'Order' : 'Orders'}
                         </Text>
                         <Text style={styles.blockingSubMessage}>
                             Please deposit the cash to the office/admin and ask them to mark payments as "Paid" to resume services.
                         </Text>
-                        <TouchableOpacity style={[styles.actionButton, { backgroundColor: '#FF5252', marginTop: 20 }]} onPress={logout}>
-                            <Text style={[styles.actionTitle, { textAlign: 'center' }]}>Logout</Text>
-                        </TouchableOpacity>
+                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, width: '100%' }}>
+                            <TouchableOpacity
+                                style={[styles.actionButton, { backgroundColor: '#4CAF50', flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 15 }]}
+                                onPress={handleRefreshStatus}
+                                disabled={loadingBalance}
+                            >
+                                {loadingBalance ? (
+                                    <ActivityIndicator color="#fff" />
+                                ) : (
+                                    <Text style={[styles.actionTitle, { textAlign: 'center', marginBottom: 0, fontSize: 13 }]}>Refresh</Text>
+                                )}
+                            </TouchableOpacity>
+                            <TouchableOpacity
+                                style={[styles.actionButton, { backgroundColor: '#FF5252', flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 15 }]}
+                                onPress={logout}
+                            >
+                                <Text style={[styles.actionTitle, { textAlign: 'center', marginBottom: 0, fontSize: 13 }]}>Logout</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </Modal>

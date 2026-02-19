@@ -2,11 +2,13 @@ import axios from 'axios';
 
 import { BASE_URL } from './client';
 
-const loginDriver = async (phone, password) => {
+const loginDriver = async (phone, password, deviceToken = null, deviceType = null) => {
     try {
-        const response = await axios.post(`${BASE_URL}/driver/login`, {
+        const response = await axios.post(`${BASE_URL}driver/login`, {
             phone,
             password,
+            deviceToken,
+            deviceType,
         });
         return response.data;
     } catch (error) {
@@ -19,7 +21,7 @@ const loginDriver = async (phone, password) => {
 
 const registerDriver = async (formData) => {
     try {
-        const response = await axios.post(`${BASE_URL}/driver/register`, formData, {
+        const response = await axios.post(`${BASE_URL}driver/register`, formData, {
             headers: {
                 'Content-Type': 'multipart/form-data',
             },

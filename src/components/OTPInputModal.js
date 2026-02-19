@@ -219,22 +219,22 @@ const styles = StyleSheet.create({
         backgroundColor: '#F8F9FA',
     },
     otpBoxActive: {
-        borderColor: '#4CAF50',
+        borderColor: '#111',
         backgroundColor: '#fff',
         elevation: 4,
-        shadowColor: '#4CAF50',
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.2,
         shadowRadius: 5,
     },
     otpBoxFilled: {
-        borderColor: '#4CAF50',
-        backgroundColor: '#F1F8F1',
+        borderColor: '#111',
+        backgroundColor: '#F9F9F9',
     },
     otpText: {
         fontSize: 32,
-        fontWeight: 'bold',
-        color: '#1A1A1A',
+        fontWeight: '900',
+        color: '#111',
     },
     buttonContainer: {
         flexDirection: 'row',
@@ -242,7 +242,7 @@ const styles = StyleSheet.create({
     },
     button: {
         flex: 1,
-        height: 55,
+        height: 60,
         borderRadius: 16,
         alignItems: 'center',
         justifyContent: 'center',
@@ -251,26 +251,26 @@ const styles = StyleSheet.create({
         backgroundColor: '#F5F5F5',
     },
     submitButton: {
-        backgroundColor: '#4CAF50',
+        backgroundColor: '#111',
         elevation: 4,
-        shadowColor: '#4CAF50',
+        shadowColor: '#000',
         shadowOffset: { width: 0, height: 4 },
         shadowOpacity: 0.3,
         shadowRadius: 8,
     },
     disabledButton: {
-        backgroundColor: '#BDBDBD',
+        backgroundColor: '#EEE',
         elevation: 0,
     },
     cancelButtonText: {
-        color: '#666',
+        color: '#888',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '700',
     },
     submitButtonText: {
         color: '#fff',
         fontSize: 16,
-        fontWeight: 'bold',
+        fontWeight: '800',
     },
 });
 

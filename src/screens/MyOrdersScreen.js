@@ -8,36 +8,34 @@ import {
     TouchableOpacity,
     ActivityIndicator,
     Alert,
+    Dimensions,
 } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import Ionicons from 'react-native-vector-icons/Ionicons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import { formatCurrency } from '../utils/currency';
+import socketService from '../services/socketService';
 
-const formatAddress = (addr) => {
-    if (!addr) return 'N/A';
-    if (typeof addr === 'string') return addr;
-
-    const parts = [
-        addr.landmark,
-        addr.addressLine2,
-        addr.postalCode
-    ].filter(Boolean);
-
-    return parts.length > 0 ? parts.join(', ') : 'N/A';
-};
+const { width } = Dimensions.get('window');
 
 const MyOrdersScreen = ({ navigation }) => {
+    const insets = useSafeAreaInsets();
     const [orders, setOrders] = useState([]);
     const [loading, setLoading] = useState(true);
+    const [activeTab, setActiveTab] = useState('Active'); // 'Active' or 'Pending'
+    const [driver, setDriver] = useState(null);
 
     const fetchOrders = async () => {
         try {
+            setLoading(true);
             const driverData = await AsyncStorage.getItem('driverData');
-            const driver = JSON.parse(driverData);
+            const driverObj = JSON.parse(driverData);
+            setDriver(driverObj);
 
-            if (!driver?._id) return;
+            if (!driverObj?._id) return;
 
-            const response = await apiClient.get(`/driver/orders/${driver._id}`);
+            const response = await apiClient.get(`/driver/orders/${driverObj._id}`);
             if (response.data.success) {
                 setOrders(response.data.orders);
             }
@@ -56,153 +54,122 @@ const MyOrdersScreen = ({ navigation }) => {
     );
 
     useEffect(() => {
-        const socketService = require('../services/socketService').default;
-        socketService.on('order_taken', ({ orderId }) => {
+        const handleOrderTaken = ({ orderId }) => {
             setOrders(currentOrders => currentOrders.filter(o => o.orderId !== orderId));
-        });
+        };
+
+        socketService.on('order_taken', handleOrderTaken);
 
         return () => {
-            socketService.removeAllListeners('order_taken');
+            // SocketService uses .off not .removeListener
+            socketService.off('order_taken', handleOrderTaken);
         };
     }, []);
 
-    const handleResume = (order) => {
-        if (order.status === 'Shipped') {
-            navigation.navigate('Delivery', { order });
-        } else {
-            navigation.navigate('Pickup', { order });
-        }
-    };
+    const activeOrders = orders.filter(o => !o.isOffer);
+    const pendingOrders = orders.filter(o => o.isOffer);
+    const currentData = activeTab === 'Active' ? activeOrders : pendingOrders;
 
-    const handleAccept = async (item) => {
-        try {
-            const driverData = await AsyncStorage.getItem('driverData');
-            const driver = JSON.parse(driverData);
+    const renderTabs = () => (
+        <View style={styles.tabContainer}>
+            <TouchableOpacity
+                style={[styles.tab, activeTab === 'Active' && styles.activeTab]}
+                onPress={() => setActiveTab('Active')}
+            >
+                <Text style={[styles.tabText, activeTab === 'Active' && styles.activeTabText]}>Active</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+                style={[styles.tab, activeTab === 'Pending' && styles.activeTab]}
+                onPress={() => setActiveTab('Pending')}
+            >
+                <Text style={[styles.tabText, activeTab === 'Pending' && styles.activeTabText]}>Pending</Text>
+            </TouchableOpacity>
+        </View>
+    );
 
-            const response = await apiClient.put(
-                `/delivery/order-offer-response/${driver._id}`,
-                {
-                    orderId: item.orderId,
-                    action: 'accept',
-                    currentLocation: { latitude: 0, longitude: 0 } // App ideally sends real GPS here
-                }
-            );
-
-            if (response.data.success) {
-                Alert.alert('Success', 'Order accepted successfully');
-                fetchOrders(); // Refresh list
-            }
-        } catch (error) {
-            console.error('Error accepting order:', error);
-            Alert.alert('Error', error.response?.data?.message || 'Failed to accept order');
-        }
-    };
-
-    const handleReject = async (item) => {
-        try {
-            const driverData = await AsyncStorage.getItem('driverData');
-            const driver = JSON.parse(driverData);
-
-            const response = await apiClient.put(
-                `/delivery/order-offer-response/${driver._id}`,
-                {
-                    orderId: item.orderId,
-                    action: 'reject'
-                }
-            );
-
-            if (response.data.success) {
-                Alert.alert('Success', 'Order offer rejected');
-                fetchOrders(); // Refresh list
-            }
-        } catch (error) {
-            console.error('Error rejecting order:', error);
-            Alert.alert('Error', error.response?.data?.message || 'Failed to reject order');
-        }
-    };
+    const renderEmptyState = () => (
+        <View style={styles.emptyContainer}>
+            <View style={styles.emptyIllustration}>
+                <View style={styles.emptyCircle}>
+                    <View style={styles.iconCircle}>
+                        <Ionicons name="cube-outline" size={48} color="#2ECC71" />
+                    </View>
+                </View>
+            </View>
+            <Text style={styles.emptyTitle}>No {activeTab.toLowerCase()} orders</Text>
+            <Text style={styles.emptySubtitle}>
+                Looks like you're all caught up. Tap the button below to fetch new available tasks near you.
+            </Text>
+            <TouchableOpacity style={styles.fetchButton} onPress={fetchOrders}>
+                <Ionicons name="refresh" size={20} color="#FFF" style={{ marginRight: 8 }} />
+                <Text style={styles.fetchButtonText}>Check for New Orders</Text>
+            </TouchableOpacity>
+        </View>
+    );
 
     const renderOrderItem = ({ item }) => (
-        <View style={[styles.orderCard, item.isOffer && styles.offerCard]}>
-            <View style={styles.orderHeader}>
+        <View style={styles.orderCard}>
+            <View style={styles.cardHeader}>
                 <Text style={styles.orderId}>Order #{item.orderId}</Text>
-                <View style={[
-                    styles.statusBadge,
-                    { backgroundColor: item.isOffer ? '#2196F3' : (item.status === 'Shipped' ? '#4CAF50' : '#FF9800') }
-                ]}>
-                    <Text style={styles.statusText}>
-                        {item.isOffer ? 'PENDING OFFER' : (item.status === 'Shipped' ? 'Delivering' : 'Picking Up')}
+                <View style={[styles.statusBadge, { backgroundColor: item.status === 'Shipped' ? '#E8F5E9' : '#FFF3E0' }]}>
+                    <Text style={[styles.statusBadgeText, { color: item.status === 'Shipped' ? '#27AE60' : '#E67E22' }]}>
+                        {item.status === 'Shipped' ? 'DELIVERING' : 'PICKING UP'}
                     </Text>
                 </View>
             </View>
 
-            <View style={styles.orderBody}>
-                <View style={styles.partnerInfo}>
-                    <Text style={styles.vendorName}>🏪 {item.rawOfferData.vendorName || 'Vendor'}</Text>
-                    <Text style={styles.customerName}>👤 {item.rawOfferData.customerName || 'Customer'}</Text>
+            <View style={styles.customerRow}>
+                <View style={styles.avatarMini}>
+                    <Ionicons name="person" size={16} color="#94A3B8" />
                 </View>
-                <Text style={styles.address}>📍 {item.rawOfferData.shippingAddress?.address || formatAddress(item.rawOfferData.shippingAddress)}</Text>
-                <View style={styles.statsRow}>
-                    <Text style={styles.stat}>📏 {item.totalDistance} km</Text>
-                    <Text style={styles.stat}>💰 {formatCurrency(item.earning)}</Text>
-                    {item.rawOfferData.totalAmount && (
-                        <Text style={styles.billStat}>🎫 {formatCurrency(item.rawOfferData.totalAmount)}</Text>
-                    )}
+                <View style={styles.customerInfo}>
+                    <Text style={styles.customerName}>{item.rawOfferData?.customerName || 'Customer'}</Text>
+                    <View style={styles.locRow}>
+                        <Ionicons name="location" size={12} color="#F87171" style={{ marginRight: 4 }} />
+                        <Text style={styles.addrText} numberOfLines={1}>{item.rawOfferData?.shippingAddress?.address || 'N/A'}</Text>
+                    </View>
                 </View>
+                <Ionicons name="chevron-forward" size={18} color="#CBD5E0" />
             </View>
 
-            {item.isOffer ? (
-                <View style={styles.buttonGroup}>
-                    <TouchableOpacity
-                        style={styles.rejectButton}
-                        onPress={() => handleReject(item)}
-                    >
-                        <Text style={styles.resumeButtonText}>Reject</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                        style={styles.acceptButton}
-                        onPress={() => handleAccept(item)}
-                    >
-                        <Text style={styles.resumeButtonText}>Accept</Text>
-                    </TouchableOpacity>
-                </View>
-            ) : (
-                <TouchableOpacity
-                    style={styles.resumeButton}
-                    onPress={() => handleResume(item)}
-                >
-                    <Text style={styles.resumeButtonText}>Resume Task</Text>
-                </TouchableOpacity>
-            )}
+            <TouchableOpacity
+                style={styles.actionButton}
+                onPress={() => {
+                    if (item.status === 'Shipped') navigation.navigate('Delivery', { order: item });
+                    else navigation.navigate('Pickup', { order: item });
+                }}
+            >
+                <Text style={styles.actionButtonText}>Resume Task</Text>
+            </TouchableOpacity>
         </View>
     );
 
-    if (loading) {
-        return (
-            <View style={styles.centered}>
-                <ActivityIndicator size="large" color="#FF9800" />
-            </View>
-        );
-    }
-
     return (
         <View style={styles.container}>
-            <FlatList
-                data={orders}
-                keyExtractor={(item) => item.orderId}
-                renderItem={renderOrderItem}
-                contentContainerStyle={styles.listContainer}
-                ListEmptyComponent={
-                    <View style={styles.emptyContainer}>
-                        <Text style={styles.emptyText}>No active orders found.</Text>
-                        <TouchableOpacity
-                            style={styles.refreshButton}
-                            onPress={fetchOrders}
-                        >
-                            <Text style={styles.refreshButtonText}>Refresh</Text>
-                        </TouchableOpacity>
+            {/* Header removed to save space */}
+
+            {/* Content Wrap */}
+            <View style={[styles.contentWrap, { paddingTop: insets.top }]}>
+                {renderTabs()}
+
+                {loading ? (
+                    <View style={styles.center}>
+                        <ActivityIndicator color="#2ECC71" size="large" />
                     </View>
-                }
-            />
+                ) : (
+                    <FlatList
+                        data={currentData}
+                        keyExtractor={item => item.orderId.toString()}
+                        renderItem={renderOrderItem}
+                        showsVerticalScrollIndicator={false}
+                        contentContainerStyle={styles.list}
+                        ListEmptyComponent={renderEmptyState}
+                        onRefresh={fetchOrders}
+                        refreshing={loading}
+                    />
+                )}
+            </View>
+
         </View>
     );
 };
@@ -210,140 +177,231 @@ const MyOrdersScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
+        backgroundColor: '#F8FAFC',
     },
-    centered: {
+    header: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        alignItems: 'center',
+        paddingHorizontal: 24,
+        paddingTop: 12,
+        paddingBottom: 8,
+    },
+    headerTitle: {
+        fontSize: 24,
+        fontWeight: '800',
+        color: '#0F172A',
+        letterSpacing: -0.5,
+    },
+    profileBtn: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#0F172A',
+        justifyContent: 'center',
+        alignItems: 'center',
+        overflow: 'hidden',
+    },
+    avatarPlaceholder: {
+        alignItems: 'center',
+        justifyContent: 'center',
+    },
+    avatarText: {
+        color: '#2ECC71',
+        fontWeight: '800',
+        fontSize: 14,
+    },
+    contentWrap: {
+        flex: 1,
+    },
+    tabContainer: {
+        flexDirection: 'row',
+        backgroundColor: '#F1F5F9',
+        marginHorizontal: 24,
+        marginVertical: 10,
+        padding: 4,
+        borderRadius: 12,
+    },
+    tab: {
+        flex: 1,
+        paddingVertical: 10,
+        alignItems: 'center',
+        borderRadius: 10,
+    },
+    activeTab: {
+        backgroundColor: '#2ECC71',
+        elevation: 4,
+        shadowColor: '#2ECC71',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+    },
+    tabText: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#64748B',
+    },
+    activeTabText: {
+        color: '#FFFFFF',
+    },
+    list: {
+        paddingHorizontal: 24,
+        paddingBottom: 40,
+        flexGrow: 1,
+    },
+    center: {
         flex: 1,
         justifyContent: 'center',
         alignItems: 'center',
     },
-    listContainer: {
-        padding: 16,
+    emptyContainer: {
+        flex: 1,
+        justifyContent: 'center',
+        alignItems: 'center',
+        paddingTop: 40,
+    },
+    emptyIllustration: {
+        marginBottom: 32,
+    },
+    emptyCircle: {
+        width: 180,
+        height: 180,
+        borderRadius: 90,
+        backgroundColor: 'rgba(46, 204, 113, 0.05)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    iconCircle: {
+        width: 80,
+        height: 80,
+        borderRadius: 40,
+        backgroundColor: 'rgba(46, 204, 113, 0.2)',
+        justifyContent: 'center',
+        alignItems: 'center',
+    },
+    emptyTitle: {
+        fontSize: 18,
+        fontWeight: '800',
+        color: '#0F172A',
+        marginBottom: 4,
+    },
+    emptySubtitle: {
+        fontSize: 14,
+        color: '#64748B',
+        textAlign: 'center',
+        lineHeight: 20,
+        paddingHorizontal: 30,
+        marginBottom: 20,
+        fontWeight: '500',
+    },
+    fetchButton: {
+        flexDirection: 'row',
+        backgroundColor: '#2ECC71',
+        paddingVertical: 18,
+        paddingHorizontal: 32,
+        borderRadius: 20,
+        alignItems: 'center',
+        elevation: 4,
+        shadowColor: '#2ECC71',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 12,
+    },
+    fetchButtonText: {
+        color: '#FFFFFF',
+        fontWeight: '800',
+        fontSize: 16,
     },
     orderCard: {
-        backgroundColor: '#fff',
-        borderRadius: 12,
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
         padding: 16,
-        marginBottom: 16,
-        elevation: 3,
+        marginBottom: 12,
+        elevation: 2,
         shadowColor: '#000',
-        shadowOffset: { width: 0, height: 2 },
-        shadowOpacity: 0.1,
-        shadowRadius: 4,
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
     },
-    orderHeader: {
+    cardHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 12,
-        borderBottomWidth: 1,
-        borderBottomColor: '#eee',
-        paddingBottom: 8,
-    },
-    orderId: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    statusBadge: {
-        paddingHorizontal: 8,
-        paddingVertical: 4,
-        borderRadius: 6,
-    },
-    statusText: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: 'bold',
-    },
-    orderBody: {
         marginBottom: 16,
     },
-    partnerInfo: {
-        marginBottom: 8,
+    orderId: {
+        fontSize: 17,
+        fontWeight: '800',
+        color: '#0F172A',
     },
-    vendorName: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#2E7D32',
-        marginBottom: 2,
+    statusBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
     },
-    customerName: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-        marginBottom: 4,
+    statusBadgeText: {
+        fontSize: 10,
+        fontWeight: '800',
+        letterSpacing: 0.5,
     },
-    address: {
-        fontSize: 13,
-        color: '#666',
+    customerRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
         marginBottom: 12,
     },
-    statsRow: {
-        flexDirection: 'row',
-        flexWrap: 'wrap',
-        gap: 12,
+    avatarMini: {
+        width: 36,
+        height: 36,
+        borderRadius: 18,
+        backgroundColor: '#F1F5F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+        marginRight: 12,
     },
-    stat: {
-        fontSize: 13,
-        color: '#333',
+    customerInfo: {
+        flex: 1,
+    },
+    customerName: {
+        fontSize: 15,
+        fontWeight: '700',
+        color: '#0F172A',
+        marginBottom: 2,
+    },
+    locRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    addrText: {
+        fontSize: 12,
+        color: '#64748B',
         fontWeight: '500',
     },
-    billStat: {
-        fontSize: 13,
-        color: '#E91E63',
-        fontWeight: 'bold',
-    },
-    resumeButton: {
-        backgroundColor: '#FF9800',
-        padding: 12,
-        borderRadius: 8,
+    actionButton: {
+        backgroundColor: '#F1F5F9',
+        paddingVertical: 14,
+        borderRadius: 16,
         alignItems: 'center',
     },
-    resumeButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: 'bold',
+    actionButtonText: {
+        color: '#334155',
+        fontSize: 15,
+        fontWeight: '700',
     },
-    offerCard: {
-        borderColor: '#2196F3',
-        borderWidth: 1,
-        backgroundColor: '#f0f7ff',
-    },
-    buttonGroup: {
-        flexDirection: 'row',
-        gap: 12,
-    },
-    acceptButton: {
-        flex: 1,
-        backgroundColor: '#2196F3',
-        padding: 12,
-        borderRadius: 8,
+    supportFab: {
+        position: 'absolute',
+        bottom: 24,
+        right: 24,
+        width: 60,
+        height: 60,
+        borderRadius: 30,
+        backgroundColor: '#0F172A',
+        justifyContent: 'center',
         alignItems: 'center',
-    },
-    rejectButton: {
-        flex: 1,
-        backgroundColor: '#F44336',
-        padding: 12,
-        borderRadius: 8,
-        alignItems: 'center',
-    },
-    emptyContainer: {
-        alignItems: 'center',
-        marginTop: 100,
-    },
-    emptyText: {
-        fontSize: 16,
-        color: '#666',
-        marginBottom: 20,
-    },
-    refreshButton: {
-        padding: 10,
-        backgroundColor: '#2196F3',
-        borderRadius: 8,
-    },
-    refreshButtonText: {
-        color: '#fff',
-        fontWeight: 'bold',
+        elevation: 8,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 6 },
+        shadowOpacity: 0.3,
+        shadowRadius: 10,
     }
 });
 

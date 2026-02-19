@@ -10,6 +10,7 @@ import {
     ActivityIndicator,
     Image,
 } from 'react-native';
+import Icon from 'react-native-vector-icons/MaterialCommunityIcons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import apiClient from '../api/client';
 import SwipeToComplete from '../components/SwipeToComplete';
@@ -116,7 +117,7 @@ const DeliveryScreen = ({ route, navigation }) => {
                     [
                         {
                             text: 'OK',
-                            onPress: () => navigation.replace('Home')
+                            onPress: () => navigation.navigate('MainTabs', { screen: 'Home' })
                         }
                     ]
                 );
@@ -146,32 +147,27 @@ const DeliveryScreen = ({ route, navigation }) => {
         <ScrollView style={styles.container}>
             <View style={styles.section}>
                 <Text style={styles.sectionTitle}>Customer Details</Text>
-                <View style={[styles.card, { padding: 0 }]}>
+                <View style={[styles.card, { padding: 16 }]}>
                     <View style={styles.customerHeader}>
                         <View style={{ flex: 1 }}>
                             <Text style={styles.customerNameLarge}>{customerName}</Text>
-                        </View>
-                        <TouchableOpacity
-                            onPress={callCustomer}
-                            style={styles.phoneBadge}
-                        >
-                            <Text style={styles.phoneBadgeText}>📞 {customerPhone || 'N/A'}</Text>
-                        </TouchableOpacity>
-                    </View>
-                    <View style={styles.cardDivider} />
-                    <View style={{ padding: 16 }}>
-                        <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' }}>
-                            <View style={{ flex: 1 }}>
-                                <Text style={styles.label}>Delivery Address</Text>
-                                <Text style={styles.addressValue}>{fullAddress}</Text>
+                            <Text style={styles.addressValue}>{fullAddress}</Text>
+                            <View style={styles.phoneContainer}>
+                                <Icon name="phone" size={16} color="#4CAF50" />
+                                <Text style={styles.phoneText}>{customerPhone || 'N/A'}</Text>
                             </View>
-                            <TouchableOpacity
-                                onPress={openGoogleMaps}
-                                style={[styles.phoneBadge, { backgroundColor: '#E1F5FE', borderColor: '#03A9F4' }]}
-                            >
-                                <Text style={[styles.phoneBadgeText, { color: '#03A9F4' }]}>📍 Map</Text>
-                            </TouchableOpacity>
                         </View>
+                    </View>
+
+                    <View style={styles.customerActions}>
+                        <TouchableOpacity style={styles.actionIconButton} onPress={callCustomer}>
+                            <Icon name="phone" size={20} color="#FFF" />
+                            <Text style={styles.actionButtonText}>Call Customer</Text>
+                        </TouchableOpacity>
+                        <TouchableOpacity style={[styles.actionIconButton, styles.mapButton]} onPress={openGoogleMaps}>
+                            <Icon name="map-marker-radius" size={20} color="#FFF" />
+                            <Text style={styles.actionButtonText}>Track Location</Text>
+                        </TouchableOpacity>
                     </View>
                 </View>
             </View>
@@ -257,26 +253,7 @@ const DeliveryScreen = ({ route, navigation }) => {
 
                         return (
                             <View style={styles.breakdownContainer}>
-                                <Text style={styles.breakdownTitle}>Payment Details</Text>
-                                <View style={styles.breakdownRow}>
-                                    <Text style={styles.breakdownLabel}>MRP Total</Text>
-                                    <Text style={styles.breakdownValue}>{formatCurrency(grossTotal)}</Text>
-                                </View>
-                                {discountTotal > 0 && (
-                                    <View style={styles.breakdownRow}>
-                                        <Text style={styles.breakdownLabel}>Discount</Text>
-                                        <Text style={[styles.breakdownValue, { color: 'green' }]}>-{formatCurrency(discountTotal)}</Text>
-                                    </View>
-                                )}
-                                <View style={styles.breakdownRow}>
-                                    <Text style={styles.breakdownLabel}>Delivery Fee</Text>
-                                    <Text style={styles.breakdownValue}>{formatCurrency(deliveryFee)}</Text>
-                                </View>
-                                <View style={styles.breakdownRow}>
-                                    <Text style={styles.breakdownLabel}>Shipping Fee</Text>
-                                    <Text style={styles.breakdownValue}>{formatCurrency(shippingFee)}</Text>
-                                </View>
-                                <View style={[styles.breakdownRow, styles.totalRow]}>
+                                <View style={[styles.breakdownRow, styles.totalRow, { marginTop: 0, borderTopWidth: 0 }]}>
                                     <Text style={styles.totalLabel}>Grand Total</Text>
                                     <Text style={styles.totalValue}>{formatCurrency(grandTotal)}</Text>
                                 </View>
@@ -323,288 +300,203 @@ const DeliveryScreen = ({ route, navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#f5f5f5',
-    },
-    header: {
-        backgroundColor: '#FF9800',
-        padding: 20,
-        alignItems: 'center',
-    },
-    headerText: {
-        fontSize: 24,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    orderIdText: {
-        fontSize: 16,
-        color: '#fff',
-        marginTop: 4,
+        backgroundColor: '#FFFFFF',
     },
     section: {
-        paddingHorizontal: 16,
-        paddingBottom: 16,
-        paddingTop: 8,
+        paddingHorizontal: 24,
+        paddingBottom: 24,
+        paddingTop: 12,
     },
     sectionTitle: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 12,
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#888',
+        marginBottom: 16,
+        textTransform: 'uppercase',
+        letterSpacing: 1.5,
     },
     card: {
-        backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 12,
-        elevation: 2,
-    },
-    detailRow: {
-        marginBottom: 12,
-    },
-    label: {
-        fontSize: 14,
-        color: '#666',
-        marginBottom: 4,
-    },
-    value: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#333',
-    },
-    phoneValue: {
-        fontSize: 16,
-        fontWeight: '600',
-        color: '#2196F3',
+        backgroundColor: '#FFFFFF',
+        padding: 24,
+        borderRadius: 24,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.08,
+        shadowRadius: 12,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
     },
     customerHeader: {
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        padding: 16,
-        backgroundColor: '#fcfcfc',
-        borderTopLeftRadius: 12,
-        borderTopRightRadius: 12,
+        marginBottom: 16,
     },
     customerNameLarge: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 22,
+        fontWeight: '900',
+        color: '#111',
+        letterSpacing: -0.5,
     },
-    phoneBadge: {
-        backgroundColor: '#E3F2FD',
-        paddingHorizontal: 12,
-        paddingVertical: 8,
-        borderRadius: 20,
-        borderWidth: 1,
-        borderColor: '#2196F3',
+    phoneContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 8,
+        backgroundColor: '#E8F5E9',
+        alignSelf: 'flex-start',
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
     },
-    phoneBadgeText: {
-        color: '#2196F3',
-        fontWeight: 'bold',
+    phoneText: {
         fontSize: 14,
+        color: '#2E7D32',
+        fontWeight: '700',
+        marginLeft: 6,
     },
     cardDivider: {
         height: 1,
-        backgroundColor: '#eee',
+        backgroundColor: '#F0F0F0',
+        marginTop: 16,
     },
-    addressValue: {
-        fontSize: 16,
-        color: '#333',
-        lineHeight: 22,
-    },
-    earningValue: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#4CAF50',
-    },
-    itemRow: {
+    customerActions: {
         flexDirection: 'row',
-        justifyContent: 'space-between',
-        paddingVertical: 8,
+        marginTop: 20,
+        gap: 12,
     },
-    itemInfo: {
+    actionIconButton: {
         flex: 1,
-    },
-    itemName: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: '500',
-    },
-    itemMeta: {
-        fontSize: 14,
-        color: '#666',
-    },
-    itemPrice: {
-        fontSize: 16,
-        color: '#333',
-        fontWeight: 'bold',
-    },
-    itemImage: {
-        width: 50,
-        height: 50,
-        borderRadius: 8,
-        marginRight: 12,
-    },
-    noImagePlaceholder: {
-        backgroundColor: '#f0f0f0',
+        flexDirection: 'row',
+        backgroundColor: '#4CAF50',
+        paddingVertical: 12,
+        borderRadius: 12,
         justifyContent: 'center',
         alignItems: 'center',
-        borderWidth: 1,
-        borderColor: '#eee',
+        elevation: 2,
     },
-    noImageText: {
-        fontSize: 10,
-        color: '#999',
-    },
-    noItemsText: {
-        fontSize: 14,
-        color: '#999',
-        textAlign: 'center',
-        padding: 10,
-    },
-    divider: {
-        height: 1,
-        backgroundColor: '#eee',
-        marginVertical: 12,
-    },
-    totalRow: {
-        flexDirection: 'row',
-        justifyContent: 'space-between',
-        alignItems: 'center',
-    },
-    totalLabel: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
-    },
-    totalValue: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#E91E63',
-    },
-    mapsButton: {
+    mapButton: {
         backgroundColor: '#2196F3',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginTop: 12,
-        elevation: 3,
     },
-    mapsButtonText: {
-        color: '#fff',
-        fontSize: 16,
+    actionButtonText: {
+        color: '#FFF',
+        fontSize: 13,
         fontWeight: 'bold',
+        marginLeft: 8,
     },
-    callButton: {
-        backgroundColor: '#4CAF50',
-        padding: 16,
-        borderRadius: 12,
-        alignItems: 'center',
-        marginTop: 12,
-        elevation: 3,
+    label: {
+        fontSize: 13,
+        color: '#888',
+        fontWeight: '700',
+        marginBottom: 6,
+        textTransform: 'uppercase',
+        letterSpacing: 0.5,
     },
-    callButtonText: {
-        color: '#fff',
-        fontSize: 16,
-        fontWeight: 'bold',
-    },
-    instructionText: {
-        fontSize: 14,
+    addressValue: {
+        fontSize: 15,
         color: '#666',
         lineHeight: 22,
-        backgroundColor: '#fff',
-        padding: 16,
-        borderRadius: 12,
-        borderLeftWidth: 4,
-        borderLeftColor: '#FF9800',
+        fontWeight: '500',
+        marginTop: 4,
     },
-    sliderContainer: {
-        padding: 16,
-        paddingBottom: 32,
+    detailRow: {
+        flexDirection: 'row',
+        justifyContent: 'space-between',
+        marginBottom: 12,
+    },
+    earningValue: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#4CAF50',
     },
     productContainer: {
-        marginBottom: 12,
-        padding: 8,
-        backgroundColor: '#f9f9f9',
-        borderRadius: 8,
+        marginBottom: 16,
+        padding: 16,
+        backgroundColor: '#F9F9F9',
+        borderRadius: 16,
         borderWidth: 1,
-        borderColor: '#eee',
+        borderColor: '#EEEEEE',
     },
     productDetailsContainer: {
         flexDirection: 'row',
         alignItems: 'flex-start',
     },
     productImage: {
-        width: 70,
-        height: 70,
-        borderRadius: 8,
-        marginRight: 12,
-        backgroundColor: '#ddd',
+        width: 80,
+        height: 80,
+        borderRadius: 12,
+        marginRight: 16,
+        backgroundColor: '#EEE',
     },
     productInfo: {
         flex: 1,
     },
     productName: {
-        fontSize: 14,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 4,
+        fontSize: 16,
+        fontWeight: '800',
+        color: '#111',
+        marginBottom: 6,
     },
     productDetails: {
         fontSize: 13,
         color: '#666',
-        marginBottom: 2,
+        marginBottom: 3,
+        fontWeight: '500',
     },
-    // New Breakdown Styles
+    divider: {
+        height: 1,
+        backgroundColor: '#F0F0F0',
+        marginVertical: 16,
+    },
     breakdownContainer: {
-        marginTop: 10,
-        paddingTop: 10,
-        borderTopWidth: 1,
-        borderTopColor: '#eee',
+        marginTop: 12,
     },
     breakdownTitle: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        marginBottom: 8,
-        color: '#333',
+        fontSize: 15,
+        fontWeight: '800',
+        marginBottom: 12,
+        color: '#111',
     },
     breakdownRow: {
         flexDirection: 'row',
         justifyContent: 'space-between',
-        marginBottom: 4,
+        marginBottom: 6,
     },
     breakdownLabel: {
         fontSize: 14,
-        color: '#666',
+        color: '#888',
+        fontWeight: '500',
     },
     breakdownValue: {
         fontSize: 14,
         color: '#333',
-        fontWeight: '500',
+        fontWeight: '700',
     },
     totalRow: {
-        marginTop: 8,
-        paddingTop: 8,
+        marginTop: 12,
+        paddingTop: 12,
         borderTopWidth: 1,
-        borderTopColor: '#eee',
+        borderTopColor: '#F0F0F0',
     },
     totalLabel: {
-        fontSize: 16,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#111',
     },
     totalValue: {
-        fontSize: 16,
-        fontWeight: 'bold',
+        fontSize: 18,
+        fontWeight: '900',
         color: '#ff6600',
-    },
-    orderHeader: {
-        marginBottom: 8,
     },
     orderHeaderText: {
         fontSize: 14,
-        fontWeight: 'bold',
-        color: '#333',
-        marginBottom: 4,
+        fontWeight: '700',
+        color: '#111',
+        marginBottom: 6,
+    },
+    sliderContainer: {
+        padding: 24,
+        paddingBottom: 48,
     },
 });
 

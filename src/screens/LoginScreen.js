@@ -10,6 +10,7 @@ import {
     KeyboardAvoidingView,
     Platform,
 } from 'react-native';
+import messaging from '@react-native-firebase/messaging';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../AuthContext';
 import { loginDriver } from '../api/auth';
@@ -28,7 +29,15 @@ const LoginScreen = ({ navigation }) => {
 
         setLoading(true);
         try {
-            const data = await loginDriver(phone, password);
+            let deviceToken = null;
+            try {
+                deviceToken = await messaging().getToken();
+                console.log('FCM Token:', deviceToken);
+            } catch (tokenError) {
+                console.warn('Failed to get FCM token:', tokenError);
+            }
+
+            const data = await loginDriver(phone, password, deviceToken, Platform.OS);
             await login(data.token, data.driver);
             // No need for navigation.replace('Home') as AppNavigator will switch stack based on token
         } catch (error) {
@@ -91,55 +100,64 @@ const LoginScreen = ({ navigation }) => {
 const styles = StyleSheet.create({
     container: {
         flex: 1,
-        backgroundColor: '#fff',
+        backgroundColor: '#FFFFFF',
     },
     inner: {
-        padding: 24,
+        padding: 32,
         flex: 1,
         justifyContent: 'center',
     },
     title: {
-        fontSize: 32,
-        fontWeight: 'bold',
-        color: '#333',
+        fontSize: 36,
+        fontWeight: '900',
+        color: '#111',
         textAlign: 'center',
         marginBottom: 8,
+        letterSpacing: -1,
     },
     subtitle: {
-        fontSize: 16,
+        fontSize: 15,
         color: '#666',
         textAlign: 'center',
-        marginBottom: 40,
+        marginBottom: 48,
+        fontWeight: '500',
     },
     input: {
-        height: 55,
+        height: 60,
+        backgroundColor: '#F9F9F9',
         borderWidth: 1,
-        borderColor: '#ddd',
-        borderRadius: 8,
-        paddingHorizontal: 16,
-        marginBottom: 16,
+        borderColor: '#EEEEEE',
+        borderRadius: 16,
+        paddingHorizontal: 20,
+        marginBottom: 20,
         fontSize: 16,
-        color: '#000',
+        color: '#111',
+        fontWeight: '500',
     },
     button: {
-        height: 55,
-        backgroundColor: '#007AFF',
-        borderRadius: 8,
+        height: 60,
+        backgroundColor: '#111', // Solid dark for premium feel
+        borderRadius: 16,
         justifyContent: 'center',
         alignItems: 'center',
-        marginTop: 16,
+        marginTop: 10,
+        elevation: 4,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
     },
     buttonText: {
-        color: '#fff',
-        fontSize: 18,
-        fontWeight: 'bold',
+        color: '#FFF',
+        fontSize: 17,
+        fontWeight: '800',
     },
     registerLink: {
-        marginTop: 20,
+        marginTop: 32,
         alignItems: 'center',
     },
     registerLinkText: {
-        color: '#007AFF',
+        color: '#666',
         fontSize: 14,
         fontWeight: '600',
     },

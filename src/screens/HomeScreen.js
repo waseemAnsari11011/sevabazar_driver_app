@@ -11,7 +11,8 @@ import {
     PermissionsAndroid,
     Platform,
     Modal,
-    ActivityIndicator
+    ActivityIndicator,
+    Switch
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -310,78 +311,89 @@ const HomeScreen = ({ navigation }) => {
                 </View>
             </Modal>
 
-            <StatusBar barStyle="light-content" backgroundColor="transparent" translucent={true} />
+            <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" translucent={false} />
             <ScrollView
                 style={styles.container}
-                contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 20 }]}
+                contentContainerStyle={[styles.scrollContent, { paddingTop: insets.top + 10, backgroundColor: '#FFFFFF', flexGrow: 1 }]}
             >
                 {/* ... (Header Section) ... */}
+                {/* Header Section */}
                 <View style={styles.header}>
-                    <View style={styles.profileSection}>
-                        <View style={[styles.avatarContainer, { borderColor: isOnline ? '#4CAF50' : '#FF5252' }]}>
-                            <Text style={styles.avatarText}>
-                                {driver?.name?.[0]?.toUpperCase() || 'D'}
+                    <View style={styles.headerTextGroup}>
+                        <Text style={styles.welcomeText}>Welcome back,</Text>
+                        <Text style={styles.driverName}>{driver?.name || 'Habibi'}!</Text>
+                        <TouchableOpacity
+                            style={styles.locationContainer}
+                            onPress={() => setShowLocationModal(true)}
+                        >
+                            <Text style={styles.locationIcon}>📍</Text>
+                            <Text style={styles.locationTextSmall} numberOfLines={1}>
+                                {currentAddress}
                             </Text>
-                            <View style={[styles.onlineBadge, { backgroundColor: isOnline ? '#4CAF50' : '#FF5252' }]} />
-                        </View>
-                        <View>
-                            <Text style={styles.welcomeText}>Welcome back,</Text>
-                            <Text style={styles.driverName}>{driver?.name || 'Habibi'}</Text>
-                            <TouchableOpacity
-                                style={styles.locationBadge}
-                                onPress={() => setShowLocationModal(true)}
-                            >
-                                <Text style={styles.locationText} numberOfLines={1}>
-                                    {currentAddress}
-                                </Text>
-                                <Text style={styles.arrowIcon}>⌄</Text>
-                            </TouchableOpacity>
-                        </View>
+                        </TouchableOpacity>
                     </View>
-                    <TouchableOpacity
-                        style={[styles.statusToggle, { borderColor: isOnline ? '#4CAF50' : '#444' }]}
-                        onPress={handleToggleStatus}
-                    >
+                    <View style={[styles.avatarContainer, { borderColor: isOnline ? '#E8F5E9' : '#F5F5F5' }]}>
+                        <Text style={styles.avatarText}>
+                            {driver?.name?.[0]?.toUpperCase() || 'D'}
+                        </Text>
+                    </View>
+                </View>
+
+                {/* Wide Status Toggle Card */}
+                <View style={styles.toggleCard}>
+                    <View style={styles.statusInfo}>
                         <View style={[styles.statusDot, { backgroundColor: isOnline ? '#4CAF50' : '#888' }]} />
-                        <Text style={styles.statusLabel}>{isOnline ? 'Online' : 'Offline'}</Text>
-                    </TouchableOpacity>
+                        <Text style={styles.statusText}>
+                            {isOnline ? 'Active Mode' : 'Offline Mode'}
+                        </Text>
+                    </View>
+                    <Switch
+                        value={isOnline}
+                        onValueChange={handleToggleStatus}
+                        trackColor={{ false: '#EEE', true: '#E8F5E9' }}
+                        thumbColor={isOnline ? '#4CAF50' : '#FFF'}
+                    />
                 </View>
 
                 {/* Wallet & Floating Cash Section Row */}
-                <View style={{ flexDirection: 'row', gap: 10 }}>
+                <View style={{ flexDirection: 'row', gap: 16 }}>
                     {/* Wallet Card */}
                     <View style={[styles.glassCard, { flex: 1 }]}>
-                        <View style={[styles.cardContent, { backgroundColor: 'rgba(76, 175, 80, 0.15)', padding: 15, minHeight: 140 }]}>
-                            <Text style={styles.cardLabel}>Earnings</Text>
-                            <View style={[styles.amountContainer, { marginBottom: 10 }]}>
-                                <Text style={[styles.amount, { fontSize: 32 }]}>
+                        <View style={[styles.cardContent, { backgroundColor: '#E3F2FD', padding: 20, minHeight: 140 }]}>
+                            <View style={{ width: 40, height: 40, backgroundColor: '#fff', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                                <Text style={{ fontSize: 20 }}>💵</Text>
+                            </View>
+                            <Text style={[styles.cardLabel, { color: '#555' }]}>EARNINGS</Text>
+                            <View style={[styles.amountContainer, { marginBottom: 4 }]}>
+                                <Text style={[styles.amount, { fontSize: 24, color: '#111' }]}>
                                     {loadingBalance ? '--' : formatCurrency(walletBalance).replace('₹', '')}
                                 </Text>
                             </View>
-                            <Text style={[styles.footerText, { fontSize: 10 }]}>Available Balance</Text>
                         </View>
                     </View>
 
                     {/* Floating Cash Card */}
                     <View style={[styles.glassCard, { flex: 1 }]}>
-                        <View style={[styles.cardContent, { backgroundColor: 'rgba(255, 82, 82, 0.15)', padding: 15, minHeight: 140 }]}>
-                            <Text style={styles.cardLabel}>Floating Cash</Text>
-                            <View style={[styles.amountContainer, { marginBottom: 10 }]}>
-                                <Text style={[styles.amount, { fontSize: 32 }]}>
+                        <View style={[styles.cardContent, { backgroundColor: '#F3E5F5', padding: 20, minHeight: 140 }]}>
+                            <View style={{ width: 40, height: 40, backgroundColor: '#fff', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
+                                <Text style={{ fontSize: 20 }}>💰</Text>
+                            </View>
+                            <Text style={[styles.cardLabel, { color: '#555' }]}>FLOATING CASH</Text>
+                            <View style={[styles.amountContainer, { marginBottom: 4 }]}>
+                                <Text style={[styles.amount, { fontSize: 24, color: '#111' }]}>
                                     {loadingBalance ? '--' : formatCurrency(floatingCash).replace('₹', '')}
                                 </Text>
                             </View>
-                            <Text style={[styles.footerText, { fontSize: 10 }]}>Limit: {formatCurrency(floatingCashLimit)}</Text>
-                            <View style={{ height: 4, width: '100%', backgroundColor: 'rgba(255,255,255,0.1)', marginTop: 5, borderRadius: 2 }}>
-                                <View style={{
-                                    height: '100%',
-                                    width: `${Math.min((floatingCash / floatingCashLimit) * 100, 100)}%`,
-                                    backgroundColor: floatingCash > floatingCashLimit * 0.9 ? '#FF5252' : '#FFA000',
-                                    borderRadius: 2
-                                }} />
-                            </View>
                         </View>
                     </View>
+                </View>
+
+                {/* Recent Tasks Header */}
+                <View style={{ flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16, marginTop: 10 }}>
+                    <Text style={{ fontSize: 14, fontWeight: 'bold', color: '#999', letterSpacing: 1 }}>RECENT TASKS</Text>
+                    <TouchableOpacity>
+                        <Text style={{ fontSize: 12, fontWeight: 'bold', color: '#5C6BC0' }}>VIEW ALL</Text>
+                    </TouchableOpacity>
                 </View>
 
                 {/* Active Task Section */}
@@ -412,43 +424,6 @@ const HomeScreen = ({ navigation }) => {
                     </TouchableOpacity>
                 )}
 
-                {/* Quick Actions */}
-                <View style={styles.actionsGrid}>
-                    <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: '#1A1D2E' }]}
-                        onPress={() => navigation.navigate('MyOrders')}
-                    >
-                        <View style={{ alignItems: 'center' }}>
-                            <View style={[styles.actionIconBg, { backgroundColor: '#2196F3' }]}>
-                                <Text style={styles.actionIcon}>📋</Text>
-                            </View>
-                            <Text style={styles.actionTitle}>My Work</Text>
-                            <Text style={styles.actionSub}>Check orders</Text>
-                        </View>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: '#1E2A1E' }]}
-                        onPress={() => navigation.navigate('EarningsHistory')}
-                    >
-                        <View style={[styles.actionIconBg, { backgroundColor: '#4CAF50' }]}>
-                            <Text style={styles.actionIcon}>💰</Text>
-                        </View>
-                        <Text style={styles.actionTitle}>History</Text>
-                        <Text style={styles.actionSub}>Earnings</Text>
-                    </TouchableOpacity>
-
-                    <TouchableOpacity
-                        style={[styles.actionButton, { backgroundColor: '#2E1A1A' }]}
-                        onPress={logout}
-                    >
-                        <View style={[styles.actionIconBg, { backgroundColor: '#FF5252' }]}>
-                            <Text style={styles.actionIcon}>🚪</Text>
-                        </View>
-                        <Text style={styles.actionTitle}>Logout</Text>
-                        <Text style={styles.actionSub}>End session</Text>
-                    </TouchableOpacity>
-                </View>
 
                 {/* Support/Footer */}
                 <View style={styles.footer}>
@@ -544,89 +519,96 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        marginBottom: 30,
+        marginBottom: 12,
     },
-    profileSection: {
+    headerTextGroup: {
         flex: 1,
+    },
+    welcomeText: {
+        fontSize: 18,
+        fontWeight: '700',
+        color: '#111',
+        letterSpacing: -0.5,
+    },
+    driverName: {
+        fontSize: 18,
+        fontWeight: '900',
+        color: '#111',
+        letterSpacing: -0.5,
+        marginTop: -4,
+    },
+    locationContainer: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginTop: 6,
+    },
+    locationIcon: {
+        fontSize: 14,
+        marginRight: 4,
+    },
+    locationTextSmall: {
+        flex: 1,
+        fontSize: 12,
+        color: '#888',
+        fontWeight: '500',
+    },
+    avatarContainer: {
+        width: 60,
+        height: 60,
+        borderRadius: 20,
+        backgroundColor: '#F9F9F9',
+        justifyContent: 'center',
+        alignItems: 'center',
+        borderWidth: 1,
+        borderColor: '#EEE',
+        marginLeft: 16,
+    },
+    avatarText: {
+        fontSize: 24,
+        fontWeight: '900',
+        color: '#111',
+    },
+    toggleCard: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        backgroundColor: '#F7F9FC',
+        paddingHorizontal: 20,
+        paddingVertical: 10,
+        borderRadius: 20,
+        marginBottom: 16,
+    },
+    statusInfo: {
         flexDirection: 'row',
         alignItems: 'center',
         gap: 12,
     },
-    avatarContainer: {
-        width: 50,
-        height: 50,
-        borderRadius: 25,
-        backgroundColor: '#1E1E1E',
-        justifyContent: 'center',
-        alignItems: 'center',
-        borderWidth: 1.5,
-        borderColor: '#4CAF50',
-    },
-    avatarText: {
-        fontSize: 20,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    onlineBadge: {
-        position: 'absolute',
-        bottom: 2,
-        right: 2,
-        width: 12,
-        height: 12,
-        borderRadius: 6,
-        backgroundColor: '#4CAF50',
-        borderWidth: 2,
-        borderColor: '#0A0A0A',
-    },
-    welcomeText: {
-        fontSize: 14,
-        color: '#888',
-    },
-    driverName: {
-        fontSize: 18,
-        fontWeight: 'bold',
-        color: '#fff',
-    },
-    statusToggle: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        backgroundColor: '#1A1A1A',
-        paddingHorizontal: 12,
-        paddingVertical: 6,
-        borderRadius: 20,
-        gap: 6,
-        borderWidth: 1,
-        borderColor: '#333',
-    },
     statusDot: {
-        width: 8,
-        height: 8,
-        borderRadius: 4,
+        width: 10,
+        height: 10,
+        borderRadius: 5,
         backgroundColor: '#4CAF50',
-        shadowColor: '#4CAF50',
-        shadowRadius: 5,
-        shadowOpacity: 0.8,
-        elevation: 5,
     },
-    statusLabel: {
-        color: '#fff',
-        fontSize: 12,
-        fontWeight: 'bold',
+    statusText: {
+        fontSize: 16,
+        fontWeight: '700',
+        color: '#1A1C1E',
     },
     glassCard: {
-        marginBottom: 24,
+        marginBottom: 16,
         borderRadius: 24,
         overflow: 'hidden',
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
+        borderWidth: 0, // Removed border
+        elevation: 2, // Added shadow
+        backgroundColor: '#fff',
     },
     cardContent: {
-        padding: 24,
-        minHeight: 180,
+        padding: 16,
+        minHeight: 120,
     },
     cardLabel: {
         fontSize: 14,
-        color: 'rgba(255, 255, 255, 0.7)',
+        color: '#555',
         marginBottom: 8,
     },
     amountContainer: {
@@ -637,14 +619,14 @@ const styles = StyleSheet.create({
     },
     currency: {
         fontSize: 24,
-        color: '#fff',
+        color: '#111', // Dark text
         fontWeight: '600',
         marginBottom: 8,
     },
     amount: {
         fontSize: 48,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#111', // Dark text
     },
     cardFooter: {
         flexDirection: 'row',
@@ -653,10 +635,10 @@ const styles = StyleSheet.create({
     },
     footerText: {
         fontSize: 14,
-        color: 'rgba(255, 255, 255, 0.6)',
+        color: '#666',
     },
     trendingContainer: {
-        backgroundColor: 'rgba(255, 255, 255, 0.1)',
+        backgroundColor: 'rgba(76, 175, 80, 0.1)',
         paddingHorizontal: 8,
         paddingVertical: 4,
         borderRadius: 8,
@@ -673,15 +655,16 @@ const styles = StyleSheet.create({
         width: 150,
         height: 150,
         borderRadius: 75,
-        backgroundColor: 'rgba(255, 255, 255, 0.05)',
+        backgroundColor: 'rgba(0, 0, 0, 0.02)',
     },
     activeOrderCard: {
-        backgroundColor: '#1E1E1E',
+        backgroundColor: '#fff',
         borderRadius: 24,
         padding: 20,
         marginBottom: 24,
         borderWidth: 1,
-        borderColor: 'rgba(76, 175, 80, 0.3)',
+        borderColor: '#E0E0E0',
+        elevation: 2,
     },
     activeHeader: {
         flexDirection: 'row',
@@ -693,12 +676,13 @@ const styles = StyleSheet.create({
         width: 44,
         height: 44,
         borderRadius: 12,
-        backgroundColor: 'rgba(76, 175, 80, 0.1)',
+        backgroundColor: '#E8F5E9',
         justifyContent: 'center',
         alignItems: 'center',
     },
     taskIcon: {
         fontSize: 20,
+        color: '#2E7D32',
     },
     taskInfo: {
         flex: 1,
@@ -706,20 +690,22 @@ const styles = StyleSheet.create({
     taskTitle: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#111',
     },
     taskId: {
         fontSize: 12,
-        color: '#888',
+        color: '#666',
     },
     statusBadge: {
-        backgroundColor: '#4CAF50',
+        backgroundColor: '#E8F5E9',
         paddingHorizontal: 10,
         paddingVertical: 4,
         borderRadius: 8,
+        borderWidth: 1,
+        borderColor: '#C8E6C9',
     },
     statusBadgeText: {
-        color: '#fff',
+        color: '#2E7D32',
         fontSize: 10,
         fontWeight: 'bold',
     },
@@ -727,17 +713,18 @@ const styles = StyleSheet.create({
         flexDirection: 'row',
         justifyContent: 'space-between',
         alignItems: 'center',
-        backgroundColor: 'rgba(255, 255, 255, 0.03)',
+        backgroundColor: '#FAFAFA',
         padding: 12,
         borderRadius: 12,
+        marginTop: 8,
     },
     resumeText: {
-        color: '#4CAF50',
+        color: '#1976D2',
         fontSize: 14,
         fontWeight: '600',
     },
     arrowIcon: {
-        color: '#4CAF50',
+        color: '#1976D2',
         fontSize: 18,
         fontWeight: 'bold',
     },
@@ -751,7 +738,9 @@ const styles = StyleSheet.create({
         padding: 20,
         borderRadius: 24,
         borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.05)',
+        borderColor: '#E0E0E0',
+        backgroundColor: '#fff',
+        elevation: 1,
     },
     actionIconBg: {
         width: 40,
@@ -760,52 +749,61 @@ const styles = StyleSheet.create({
         justifyContent: 'center',
         alignItems: 'center',
         marginBottom: 12,
+        backgroundColor: '#F5F5F5',
     },
     actionIcon: {
         fontSize: 20,
+        color: '#333',
     },
     actionTitle: {
         fontSize: 16,
         fontWeight: 'bold',
-        color: '#fff',
+        color: '#111',
         marginBottom: 4,
     },
     actionSub: {
         fontSize: 12,
-        color: '#888',
+        color: '#666',
+    },
+    profileCard: {
+        backgroundColor: '#fff',
+        borderRadius: 16,
+        padding: 16,
+        marginBottom: 12,
+        borderWidth: 1,
+        borderColor: '#E0E0E0',
+        elevation: 1,
+    },
+    profileContent: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    profileInfo: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    profileName: {
+        fontSize: 16,
+        fontWeight: 'bold',
+        color: '#111',
+        marginBottom: 4,
+    },
+    profileSub: {
+        fontSize: 12,
+        color: '#666',
+    },
+    logoutIcon: {
+        fontSize: 24,
+        color: '#D32F2F',
     },
     footer: {
         alignItems: 'center',
         paddingVertical: 20,
     },
     footerNote: {
-        color: '#555',
+        color: '#888',
         fontSize: 12,
-    },
-    locationBadge: {
-        flexDirection: 'row',
-        alignItems: 'center',
-        marginTop: 6,
-        paddingHorizontal: 10,
-        paddingVertical: 5,
-        backgroundColor: 'rgba(255, 255, 255, 0.08)',
-        borderRadius: 12,
-        borderWidth: 1,
-        borderColor: 'rgba(255, 255, 255, 0.1)',
-        maxWidth: width * 0.5,
-    },
-    locationText: {
-        fontSize: 10,
-        color: '#fff',
-        fontWeight: '500',
-        flexShrink: 1,
-    },
-    arrowIcon: {
-        fontSize: 16,
-        color: '#4CAF50',
-        marginLeft: 6,
-        fontWeight: '900', // Ultra bold
-        marginBottom: 4, // Adjust vertical alignment for the chevron
     },
     // Modal & Bottom Sheet Styles
     modalOverlay: {

@@ -12,7 +12,8 @@ import {
     Platform,
     Modal,
     ActivityIndicator,
-    Switch
+    Switch,
+    DeviceEventEmitter
 } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useFocusEffect } from '@react-navigation/native';
@@ -30,7 +31,6 @@ const HomeScreen = ({ navigation }) => {
     const insets = useSafeAreaInsets();
     const { driver, logout, authToken } = useAuth();
     const [floatingCash, setFloatingCash] = useState(0);
-    const [floatingCashLimit, setFloatingCashLimit] = useState(2000);
     const [isOnline, setIsOnline] = useState(false);
     const [isPaymentOverdue, setIsPaymentOverdue] = useState(false);
     const [overdueCount, setOverdueCount] = useState(0);
@@ -41,6 +41,10 @@ const HomeScreen = ({ navigation }) => {
     const [loadingBalance, setLoadingBalance] = useState(false);
     const [activeOrder, setActiveOrder] = useState(null);
     const [updatingLocation, setUpdatingLocation] = useState(false);
+    const [todayEarnings, setTodayEarnings] = useState(0);
+    const [todayOrders, setTodayOrders] = useState(0);
+    const [todayOnlineTime, setTodayOnlineTime] = useState('0h 0m');
+    const [rejectionCount, setRejectionCount] = useState(0);
     const isMounted = useRef(true);
 
     useEffect(() => {
@@ -49,6 +53,18 @@ const HomeScreen = ({ navigation }) => {
             isMounted.current = false;
         };
     }, []);
+
+    // Listen for real-time rejection count updates from order rejections
+    useEffect(() => {
+        const sub = DeviceEventEmitter.addListener('rejectionUpdated', ({ rejectionCount: count, isBlocked }) => {
+            if (!isMounted.current) return;
+            setRejectionCount(count);
+            if (isBlocked) {
+                navigation.navigate('RejectionBlocked');
+            }
+        });
+        return () => sub.remove();
+    }, [navigation]);
 
     // Force offline if payment is overdue
     useEffect(() => {
@@ -228,11 +244,20 @@ const HomeScreen = ({ navigation }) => {
                 if (!isMounted.current || !authToken) return;
                 setWalletBalance(response.data.balance);
                 setFloatingCash(response.data.floatingCash || 0);
-                setFloatingCashLimit(response.data.floatingCashLimit || 2000);
                 setIsOnline(response.data.isOnline);
                 setIsPaymentOverdue(response.data.isPaymentOverdue || false);
                 setOverdueCount(response.data.overdueCount || 0);
                 setOverdueAmount(response.data.overdueAmount || 0);
+                setTodayEarnings(response.data.todayEarnings || 0);
+                setTodayOrders(response.data.todayOrders || 0);
+                setTodayOnlineTime(response.data.todayOnlineTime || '0h 0m');
+                setRejectionCount(response.data.rejectionCount || 0);
+
+                // Navigate to blocked screen if driver is blocked
+                if (response.data.isBlocked) {
+                    navigation.navigate('RejectionBlocked');
+                    return response.data;
+                }
 
                 // Smart Recovery Logic: If was blocked and now clear, auto-online
                 if (response.data.overdueCount === 0) {
@@ -262,6 +287,15 @@ const HomeScreen = ({ navigation }) => {
             fetchWalletBalance();
             fetchActiveOrder();
             handleUpdateLocation(false);
+
+            // Periodic refresh every 60 seconds while focused
+            const interval = setInterval(() => {
+                console.log('Periodic refresh triggered');
+                fetchWalletBalance();
+                fetchActiveOrder();
+            }, 60000);
+
+            return () => clearInterval(interval);
         }, [fetchWalletBalance, fetchActiveOrder, handleUpdateLocation])
     );
 
@@ -288,9 +322,9 @@ const HomeScreen = ({ navigation }) => {
                         <Text style={styles.blockingSubMessage}>
                             Please deposit the cash to the office/admin and ask them to mark payments as "Paid" to resume services.
                         </Text>
-                        <View style={{ flexDirection: 'row', gap: 10, marginTop: 15, width: '100%' }}>
+                        <View style={{ flexDirection: 'row', marginTop: 15, width: '100%' }}>
                             <TouchableOpacity
-                                style={[styles.actionButton, { backgroundColor: '#4CAF50', flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 15 }]}
+                                style={[styles.actionButton, { backgroundColor: '#4CAF50', flex: 1, alignItems: 'center', justifyContent: 'center', paddingVertical: 15, marginRight: 10 }]}
                                 onPress={handleRefreshStatus}
                                 disabled={loadingBalance}
                             >
@@ -355,10 +389,32 @@ const HomeScreen = ({ navigation }) => {
                     />
                 </View>
 
+                {/* Rejection Warning Banner */}
+                {rejectionCount > 0 && (
+                    <View style={[
+                        styles.rejectionWarning,
+                        rejectionCount === 2 && styles.rejectionWarningDanger
+                    ]}>
+                        <Text style={styles.rejectionWarningIcon}>
+                            {rejectionCount === 2 ? '🚨' : '⚠️'}
+                        </Text>
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.rejectionWarningTitle}>
+                                Rejection Warning ({rejectionCount}/3)
+                            </Text>
+                            <Text style={styles.rejectionWarningText}>
+                                {rejectionCount === 2
+                                    ? 'Last warning! One more rejection will block your account.'
+                                    : `You have ${3 - rejectionCount} rejection${3 - rejectionCount > 1 ? 's' : ''} remaining before your account is blocked.`}
+                            </Text>
+                        </View>
+                    </View>
+                )}
+
                 {/* Wallet & Floating Cash Section Row */}
-                <View style={{ flexDirection: 'row', gap: 16 }}>
+                <View style={{ flexDirection: 'row' }}>
                     {/* Wallet Card */}
-                    <View style={[styles.glassCard, { flex: 1 }]}>
+                    <View style={[styles.glassCard, { flex: 1, marginRight: 16 }]}>
                         <View style={[styles.cardContent, { backgroundColor: '#E3F2FD', padding: 20, minHeight: 140 }]}>
                             <View style={{ width: 40, height: 40, backgroundColor: '#fff', borderRadius: 12, justifyContent: 'center', alignItems: 'center', marginBottom: 12 }}>
                                 <Text style={{ fontSize: 20 }}>💵</Text>
@@ -383,6 +439,57 @@ const HomeScreen = ({ navigation }) => {
                                 <Text style={[styles.amount, { fontSize: 24, color: '#111' }]}>
                                     {loadingBalance ? '--' : formatCurrency(floatingCash).replace('₹', '')}
                                 </Text>
+                            </View>
+                        </View>
+                    </View>
+                </View>
+
+                {/* TODAY'S PROGRESS Section */}
+                <View style={styles.progressCard}>
+                    <Text style={styles.progressTitle}>TODAY'S PROGRESS</Text>
+                    <View style={styles.progressGrid}>
+                        <View style={styles.progressItem}>
+                            <Text
+                                style={styles.progressValue}
+                                adjustsFontSizeToFit
+                                numberOfLines={1}
+                                minimumFontScale={0.7}
+                            >
+                                {formatCurrency(todayEarnings)}
+                            </Text>
+                            <View style={styles.progressLabelRow}>
+                                <Text style={styles.progressIcon}>₹</Text>
+                                <Text style={styles.progressLabel}>Earnings</Text>
+                            </View>
+                        </View>
+                        <View style={styles.progressDivider} />
+                        <View style={styles.progressItem}>
+                            <Text
+                                style={styles.progressValue}
+                                adjustsFontSizeToFit
+                                numberOfLines={1}
+                                minimumFontScale={0.7}
+                            >
+                                {todayOnlineTime}
+                            </Text>
+                            <View style={styles.progressLabelRow}>
+                                <Text style={styles.progressIcon}>🕒</Text>
+                                <Text style={styles.progressLabel}>Online time</Text>
+                            </View>
+                        </View>
+                        <View style={styles.progressDivider} />
+                        <View style={styles.progressItem}>
+                            <Text
+                                style={styles.progressValue}
+                                adjustsFontSizeToFit
+                                numberOfLines={1}
+                                minimumFontScale={0.7}
+                            >
+                                {todayOrders}
+                            </Text>
+                            <View style={styles.progressLabelRow}>
+                                <Text style={styles.progressIcon}>🛍️</Text>
+                                <Text style={styles.progressLabel}>Orders</Text>
                             </View>
                         </View>
                     </View>
@@ -581,13 +688,13 @@ const styles = StyleSheet.create({
     statusInfo: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
     },
     statusDot: {
         width: 10,
         height: 10,
         borderRadius: 5,
         backgroundColor: '#4CAF50',
+        marginRight: 12,
     },
     statusText: {
         fontSize: 16,
@@ -614,7 +721,6 @@ const styles = StyleSheet.create({
     amountContainer: {
         flexDirection: 'row',
         alignItems: 'flex-end',
-        gap: 4,
         marginBottom: 20,
     },
     currency: {
@@ -622,6 +728,7 @@ const styles = StyleSheet.create({
         color: '#111', // Dark text
         fontWeight: '600',
         marginBottom: 8,
+        marginRight: 4,
     },
     amount: {
         fontSize: 48,
@@ -669,7 +776,6 @@ const styles = StyleSheet.create({
     activeHeader: {
         flexDirection: 'row',
         alignItems: 'center',
-        gap: 12,
         marginBottom: 16,
     },
     taskIconContainer: {
@@ -679,6 +785,7 @@ const styles = StyleSheet.create({
         backgroundColor: '#E8F5E9',
         justifyContent: 'center',
         alignItems: 'center',
+        marginRight: 12,
     },
     taskIcon: {
         fontSize: 20,
@@ -730,7 +837,6 @@ const styles = StyleSheet.create({
     },
     actionsGrid: {
         flexDirection: 'row',
-        gap: 16,
         marginBottom: 30,
     },
     actionButton: {
@@ -866,6 +972,93 @@ const styles = StyleSheet.create({
         color: '#fff',
         fontSize: 18,
         fontWeight: 'bold',
+    },
+
+    // Today's Progress Styles
+    progressCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        paddingVertical: 20,
+        paddingHorizontal: 16,
+        marginBottom: 20,
+        borderWidth: 1,
+        borderColor: '#F0F0F0',
+        elevation: 1,
+    },
+    progressTitle: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#A0A0A0',
+        textAlign: 'center',
+        marginBottom: 16,
+        letterSpacing: 1.2,
+    },
+    progressGrid: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+    },
+    progressItem: {
+        flex: 1,
+        alignItems: 'center',
+    },
+    progressValue: {
+        fontSize: 20,
+        fontWeight: '900',
+        color: '#111',
+        marginBottom: 6,
+        textAlign: 'center',
+        paddingHorizontal: 2,
+    },
+    progressLabelRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+    },
+    progressIcon: {
+        fontSize: 12,
+        marginRight: 4,
+        color: '#777',
+    },
+    progressLabel: {
+        fontSize: 12,
+        fontWeight: '500',
+        color: '#777',
+    },
+    progressDivider: {
+        width: 1,
+        height: 40,
+        backgroundColor: '#F0F0F0',
+    },
+    rejectionWarning: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#FFF8E1',
+        borderRadius: 14,
+        paddingVertical: 12,
+        paddingHorizontal: 16,
+        marginBottom: 16,
+        borderWidth: 1,
+        borderColor: '#FFD54F',
+        gap: 12,
+    },
+    rejectionWarningDanger: {
+        backgroundColor: '#FFEBEE',
+        borderColor: '#EF9A9A',
+    },
+    rejectionWarningIcon: {
+        fontSize: 26,
+    },
+    rejectionWarningTitle: {
+        fontSize: 14,
+        fontWeight: '800',
+        color: '#7B6000',
+        marginBottom: 2,
+    },
+    rejectionWarningText: {
+        fontSize: 12,
+        color: '#5D4037',
+        fontWeight: '500',
+        lineHeight: 17,
     },
 });
 

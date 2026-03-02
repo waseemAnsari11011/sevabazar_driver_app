@@ -26,6 +26,14 @@ class NotificationService {
             vibrationPattern: [300, 500],
         });
 
+        // Create the channel for cancellation notifications
+        await notifee.createChannel({
+            id: 'order_cancelled_channel',
+            name: 'Order Cancellations',
+            importance: AndroidImportance.HIGH,
+            sound: 'order_cancelled', // References res/raw/order_cancelled.mp3
+        });
+
         // Request permissions
         await notifee.requestPermission();
     }
@@ -144,6 +152,20 @@ class NotificationService {
     async clearNotifications() {
         await notifee.cancelNotification(ORDER_NOTIFICATION_ID);
     }
+
+    async displayCancellationNotification(shortId) {
+        await notifee.displayNotification({
+            title: `Order #${shortId || 'Unknown'} Cancelled`,
+            body: 'The customer has cancelled this order.',
+            android: {
+                channelId: 'order_cancelled_channel',
+                importance: AndroidImportance.HIGH,
+                pressAction: {
+                    id: 'default',
+                },
+            },
+        });
+    }
 }
 
 const notificationService = new NotificationService();
@@ -153,12 +175,18 @@ export const backgroundHandler = async (remoteMessage) => {
     console.log('Message handled in the background!', remoteMessage);
 
     const data = remoteMessage.data;
-    if (data?.type === 'new_order' || data?.orderId) {
+    if (data?.type === 'new_order') {
         const title = data.title || "New Order Available! 📦";
         const body = data.body || "You have a new order offer.";
 
         // Trigger notification to wake the app
         await notificationService.displayNotification(title, body, data);
+    } else if (data?.type === 'order_cancelled') {
+        console.log('[NotificationService] Order Cancelled push received in background');
+        // 1. Cancel any ringing notification for this order
+        await notificationService.clearNotifications();
+        // 2. Show the cancellation notification with sound
+        await notificationService.displayCancellationNotification(data.shortId);
     }
 };
 

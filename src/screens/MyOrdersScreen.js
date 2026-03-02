@@ -9,6 +9,7 @@ import {
     ActivityIndicator,
     Alert,
     Dimensions,
+    Image,
 } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from 'react-native-vector-icons/Ionicons';
@@ -66,9 +67,9 @@ const MyOrdersScreen = ({ navigation }) => {
         };
     }, []);
 
-    const activeOrders = orders.filter(o => !o.isOffer);
-    const pendingOrders = orders.filter(o => o.isOffer);
-    const currentData = activeTab === 'Active' ? activeOrders : pendingOrders;
+    const activeOrders = orders.filter(o => !o.isOffer && !o.isRejected);
+    const rejectedOrders = orders.filter(o => o.isRejected === true);
+    const currentData = activeTab === 'Active' ? activeOrders : rejectedOrders;
 
     const renderTabs = () => (
         <View style={styles.tabContainer}>
@@ -79,10 +80,10 @@ const MyOrdersScreen = ({ navigation }) => {
                 <Text style={[styles.tabText, activeTab === 'Active' && styles.activeTabText]}>Active</Text>
             </TouchableOpacity>
             <TouchableOpacity
-                style={[styles.tab, activeTab === 'Pending' && styles.activeTab]}
-                onPress={() => setActiveTab('Pending')}
+                style={[styles.tab, activeTab === 'Rejected' && styles.rejectedActiveTab]}
+                onPress={() => setActiveTab('Rejected')}
             >
-                <Text style={[styles.tabText, activeTab === 'Pending' && styles.activeTabText]}>Pending</Text>
+                <Text style={[styles.tabText, activeTab === 'Rejected' && styles.rejectedActiveTabText]}>Rejected</Text>
             </TouchableOpacity>
         </View>
     );
@@ -107,47 +108,86 @@ const MyOrdersScreen = ({ navigation }) => {
         </View>
     );
 
-    const renderOrderItem = ({ item }) => (
-        <View style={styles.orderCard}>
-            <View style={styles.cardHeader}>
-                <Text style={styles.orderId}>Order #{item.orderId}</Text>
-                <View style={[styles.statusBadge, { backgroundColor: item.status === 'Shipped' ? '#E8F5E9' : '#FFF3E0' }]}>
-                    <Text style={[styles.statusBadgeText, { color: item.status === 'Shipped' ? '#27AE60' : '#E67E22' }]}>
-                        {item.status === 'Shipped' ? 'DELIVERING' : 'PICKING UP'}
-                    </Text>
-                </View>
-            </View>
+    const renderOrderItem = ({ item }) => {
+        const items = item.rawOfferData?.items || [];
+        const total = item.rawOfferData?.totalAmount || item.rawOfferData?.orderTotal || 0;
+        const firstItem = items[0];
+        const extraCount = items.length - 1;
 
-            <View style={styles.customerRow}>
-                <View style={styles.avatarMini}>
-                    <Ionicons name="person" size={16} color="#94A3B8" />
-                </View>
-                <View style={styles.customerInfo}>
-                    <Text style={styles.customerName}>{item.rawOfferData?.customerName || 'Customer'}</Text>
-                    <View style={styles.locRow}>
-                        <Ionicons name="location" size={12} color="#F87171" style={{ marginRight: 4 }} />
-                        <Text style={styles.addrText} numberOfLines={1}>{item.rawOfferData?.shippingAddress?.address || 'N/A'}</Text>
+        return (
+            <View style={styles.orderCard}>
+                <View style={styles.cardHeader}>
+                    <Text style={styles.orderId}>Order #{item.orderId}</Text>
+                    <View style={[styles.statusBadge, { backgroundColor: item.status === 'Shipped' ? '#E8F5E9' : '#FFF3E0' }]}>
+                        <Text style={[styles.statusBadgeText, { color: item.status === 'Shipped' ? '#27AE60' : '#E67E22' }]}>
+                            {item.status === 'Shipped' ? 'DELIVERING' : 'PICKING UP'}
+                        </Text>
                     </View>
                 </View>
-                <Ionicons name="chevron-forward" size={18} color="#CBD5E0" />
+
+                {/* Product preview */}
+                {firstItem ? (
+                    <View style={styles.productPreviewRow}>
+                        {firstItem.image ? (
+                            <Image source={{ uri: firstItem.image }} style={styles.productThumb} resizeMode="cover" />
+                        ) : (
+                            <View style={[styles.productThumb, { backgroundColor: '#F1F5F9', justifyContent: 'center', alignItems: 'center' }]}>
+                                <Ionicons name="cube-outline" size={20} color="#94A3B8" />
+                            </View>
+                        )}
+                        <View style={{ flex: 1 }}>
+                            <Text style={styles.productPreviewName} numberOfLines={1}>{firstItem.name}</Text>
+                            {(firstItem.variations?.[0]?.attributes?.length > 0) && (
+                                <Text style={styles.productVariant} numberOfLines={1}>
+                                    {firstItem.variations[0].attributes.map(a => `${a.name}: ${a.value}`).join(' · ')}
+                                </Text>
+                            )}
+                            {extraCount > 0 && (
+                                <Text style={styles.moreItems}>+{extraCount} more item{extraCount > 1 ? 's' : ''}</Text>
+                            )}
+                        </View>
+                        <Text style={styles.totalAmount}>₹{total}</Text>
+                    </View>
+                ) : null}
+
+                <TouchableOpacity
+                    style={styles.actionButton}
+                    onPress={() => {
+                        if (item.status === 'Shipped') navigation.navigate('Delivery', { order: item });
+                        else navigation.navigate('Pickup', { order: item });
+                    }}
+                >
+                    <Text style={styles.actionButtonText}>Resume Task</Text>
+                </TouchableOpacity>
+            </View>
+        );
+    };
+
+    const renderRejectedItem = ({ item }) => (
+        <View style={styles.rejectedCard}>
+            <View style={styles.cardHeader}>
+                <Text style={styles.orderId}>Order #{item.orderId}</Text>
+                <View style={styles.rejectedBadge}>
+                    <Text style={styles.rejectedBadgeText}>REJECTED</Text>
+                </View>
             </View>
 
-            <TouchableOpacity
-                style={styles.actionButton}
-                onPress={() => {
-                    if (item.status === 'Shipped') navigation.navigate('Delivery', { order: item });
-                    else navigation.navigate('Pickup', { order: item });
-                }}
-            >
-                <Text style={styles.actionButtonText}>Resume Task</Text>
-            </TouchableOpacity>
+            <View style={styles.vendorRow}>
+                <Ionicons name="storefront-outline" size={16} color="#94A3B8" style={{ marginRight: 8 }} />
+                <Text style={styles.customerName}>{item.rawOfferData?.vendorName || 'Vendor'}</Text>
+            </View>
+
+            {item.rejectionReason ? (
+                <View style={styles.reasonBox}>
+                    <Ionicons name="chatbox-ellipses-outline" size={14} color="#b91c1c" style={{ marginRight: 6 }} />
+                    <Text style={styles.reasonText}>Reason: {item.rejectionReason}</Text>
+                </View>
+            ) : null}
         </View>
     );
 
     return (
         <View style={styles.container}>
-            {/* Header removed to save space */}
-
             {/* Content Wrap */}
             <View style={[styles.contentWrap, { paddingTop: insets.top }]}>
                 {renderTabs()}
@@ -159,8 +199,8 @@ const MyOrdersScreen = ({ navigation }) => {
                 ) : (
                     <FlatList
                         data={currentData}
-                        keyExtractor={item => item.orderId.toString()}
-                        renderItem={renderOrderItem}
+                        keyExtractor={item => `${item.orderId}-${item.isRejected}`}
+                        renderItem={activeTab === 'Rejected' ? renderRejectedItem : renderOrderItem}
                         showsVerticalScrollIndicator={false}
                         contentContainerStyle={styles.list}
                         ListEmptyComponent={renderEmptyState}
@@ -236,12 +276,23 @@ const styles = StyleSheet.create({
         shadowOpacity: 0.2,
         shadowRadius: 8,
     },
+    rejectedActiveTab: {
+        backgroundColor: '#f44336',
+        elevation: 4,
+        shadowColor: '#f44336',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.2,
+        shadowRadius: 8,
+    },
     tabText: {
         fontSize: 15,
         fontWeight: '700',
         color: '#64748B',
     },
     activeTabText: {
+        color: '#FFFFFF',
+    },
+    rejectedActiveTabText: {
         color: '#FFFFFF',
     },
     list: {
@@ -367,14 +418,42 @@ const styles = StyleSheet.create({
         color: '#0F172A',
         marginBottom: 2,
     },
-    locRow: {
+    productPreviewRow: {
         flexDirection: 'row',
         alignItems: 'center',
+        backgroundColor: '#F8FAFC',
+        borderRadius: 12,
+        padding: 10,
+        marginBottom: 12,
+        gap: 10,
     },
-    addrText: {
-        fontSize: 12,
+    productThumb: {
+        width: 72,
+        height: 72,
+        borderRadius: 12,
+        marginRight: 2,
+    },
+    productPreviewName: {
+        fontSize: 13,
+        fontWeight: '700',
+        color: '#0F172A',
+        marginBottom: 2,
+    },
+    productVariant: {
+        fontSize: 11,
         color: '#64748B',
         fontWeight: '500',
+    },
+    moreItems: {
+        fontSize: 11,
+        color: '#94A3B8',
+        fontWeight: '500',
+        marginTop: 2,
+    },
+    totalAmount: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#2ECC71',
     },
     actionButton: {
         backgroundColor: '#F1F5F9',
@@ -402,7 +481,55 @@ const styles = StyleSheet.create({
         shadowOffset: { width: 0, height: 6 },
         shadowOpacity: 0.3,
         shadowRadius: 10,
-    }
-});
+    },
+    rejectedCard: {
+        backgroundColor: '#FFFFFF',
+        borderRadius: 20,
+        padding: 16,
+        marginBottom: 12,
+        elevation: 2,
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.05,
+        shadowRadius: 8,
+        borderLeftWidth: 4,
+        borderLeftColor: '#f44336',
+    },
+    rejectedBadge: {
+        paddingHorizontal: 10,
+        paddingVertical: 4,
+        borderRadius: 8,
+        backgroundColor: '#ffebee',
+    },
+    rejectedBadgeText: {
+        fontSize: 10,
+        fontWeight: '800',
+        color: '#f44336',
+        letterSpacing: 0.5,
+    },
+    vendorRow: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        marginBottom: 8,
+    },
+    reasonBox: {
+        flexDirection: 'row',
+        alignItems: 'center',
+        backgroundColor: '#fff5f5',
+        borderRadius: 10,
+        paddingHorizontal: 10,
+        paddingVertical: 8,
+        marginTop: 4,
+        borderWidth: 1,
+        borderColor: '#fecaca',
+    },
+    reasonText: {
+        fontSize: 13,
+        color: '#b91c1c',
+        fontWeight: '500',
+        flex: 1,
+    },
+}
+);
 
 export default MyOrdersScreen;

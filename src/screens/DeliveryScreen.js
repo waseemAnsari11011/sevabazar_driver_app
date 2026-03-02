@@ -20,6 +20,7 @@ import { formatCurrency } from '../utils/currency';
 const formatAddress = (addr) => {
     if (!addr) return 'Address not available';
     if (typeof addr === 'string') return addr;
+    if (addr.fullAddress) return addr.fullAddress;
 
     const parts = [
         addr.landmark,
@@ -41,7 +42,7 @@ const DeliveryScreen = ({ route, navigation }) => {
     const shippingAddress = rawData.shippingAddress || {};
 
     // Construct address string
-    const fullAddress = shippingAddress.address || formatAddress(shippingAddress);
+    const fullAddress = shippingAddress.fullAddress || shippingAddress.address || formatAddress(shippingAddress);
 
     const customerPhone = shippingAddress.phone || rawData.customerPhone || '';
     const customerName = shippingAddress.name || rawData.customerName || rawData.name || 'Customer';
@@ -267,11 +268,11 @@ const DeliveryScreen = ({ route, navigation }) => {
                 <Text style={styles.sectionTitle}>Earnings Info</Text>
                 <View style={styles.card}>
                     <View style={styles.detailRow}>
-                        <Text style={styles.label}>Total Distance:</Text>
-                        <Text style={styles.value}>{order.totalDistance} km</Text>
+                        <Text style={styles.detailLabel}>Total Distance:</Text>
+                        <Text style={styles.detailValue}>{order.totalDistance} km</Text>
                     </View>
                     <View style={styles.detailRow}>
-                        <Text style={styles.label}>Your Earning:</Text>
+                        <Text style={styles.detailLabel}>Your Earning:</Text>
                         <Text style={styles.earningValue}>{formatCurrency(order.earning)}</Text>
                     </View>
                 </View>
@@ -384,13 +385,15 @@ const styles = StyleSheet.create({
         fontWeight: 'bold',
         marginLeft: 8,
     },
-    label: {
-        fontSize: 13,
+    detailLabel: {
+        fontSize: 15,
         color: '#888',
-        fontWeight: '700',
-        marginBottom: 6,
-        textTransform: 'uppercase',
-        letterSpacing: 0.5,
+        fontWeight: '600',
+    },
+    detailValue: {
+        fontSize: 15,
+        fontWeight: '800',
+        color: '#111',
     },
     addressValue: {
         fontSize: 15,

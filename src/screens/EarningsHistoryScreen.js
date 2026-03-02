@@ -108,10 +108,10 @@ const EarningsHistoryScreen = ({ navigation, route }) => {
             }
 
             // Counts for Cash Tab
-            if (order.floatingCashStatus === 'Settled') {
+            if (order.floatingCashStatus === 'Settled' || order.floatingCashStatus === 'Paid') {
                 acc[date].cashSettledCount += 1;
             } else {
-                // Assuming anything not Settled is Unsettled/Pending for Cash
+                // Assuming anything not Settled/Paid is Unsettled/Pending for Cash
                 acc[date].cashUnsettledCount += 1;
                 acc[date].allSettled = false;
             }

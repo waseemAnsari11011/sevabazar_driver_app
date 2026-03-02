@@ -23,9 +23,11 @@ const PickupScreen = ({ route, navigation }) => {
 
     // Extract vendor details from order
     const rawData = order.rawOfferData || {};
-    const vendorName = rawData.vendorName || 'Vendor';
+    const vendorName = rawData.businessName || rawData.vendorName || 'Vendor';
+    const vendorContactName = rawData.vendorName || 'Vendor';
     const vendorAddress = rawData.vendorAddress || 'Vendor Address';
     const vendorPhone = rawData.vendorPhone || 'N/A';
+    const shopPhoto = rawData.vendorShopPhoto;
     const vendorLocation = rawData.pickupLocation || {};
 
     const openGoogleMaps = () => {
@@ -98,27 +100,37 @@ const PickupScreen = ({ route, navigation }) => {
     return (
         <ScrollView style={styles.container}>
             <View style={styles.section}>
-                <Text style={styles.sectionTitle}>Vendor Location</Text>
-                <View style={styles.card}>
-                    <View style={styles.vendorHeader}>
-                        <View style={{ flex: 1 }}>
-                            <Text style={styles.vendorNameText}>{vendorName}</Text>
-                            <Text style={styles.addressText}>{vendorAddress}</Text>
-                            <View style={styles.phoneContainer}>
-                                <Icon name="phone" size={16} color="#4CAF50" />
-                                <Text style={styles.phoneText}>{vendorPhone}</Text>
+                <Text style={styles.sectionTitle}>Vendor information</Text>
+                <View style={[styles.card, { padding: 0, overflow: 'hidden' }]}>
+                    {shopPhoto && (
+                        <Image
+                            source={{ uri: shopPhoto }}
+                            style={styles.shopImage}
+                            resizeMode="cover"
+                        />
+                    )}
+                    <View style={{ padding: 24 }}>
+                        <View style={styles.vendorHeader}>
+                            <View style={{ flex: 1 }}>
+                                <Text style={styles.vendorNameText}>{vendorName}</Text>
+                                <Text style={styles.contactNameSubtext}>Owner: {vendorContactName}</Text>
+                                <Text style={styles.addressText}>{vendorAddress}</Text>
+                                <View style={styles.phoneContainer}>
+                                    <Icon name="phone" size={16} color="#4CAF50" />
+                                    <Text style={styles.phoneText}>{vendorPhone}</Text>
+                                </View>
                             </View>
                         </View>
-                    </View>
-                    <View style={styles.vendorActions}>
-                        <TouchableOpacity style={styles.actionIconButton} onPress={handleCallVendor}>
-                            <Icon name="phone" size={20} color="#FFF" />
-                            <Text style={styles.actionButtonText}>Call Vendor</Text>
-                        </TouchableOpacity>
-                        <TouchableOpacity style={[styles.actionIconButton, styles.mapButton]} onPress={openGoogleMaps}>
-                            <Icon name="map-marker-radius" size={20} color="#FFF" />
-                            <Text style={styles.actionButtonText}>Track Location</Text>
-                        </TouchableOpacity>
+                        <View style={styles.vendorActions}>
+                            <TouchableOpacity style={styles.actionIconButton} onPress={handleCallVendor}>
+                                <Icon name="phone" size={20} color="#FFF" />
+                                <Text style={styles.actionButtonText}>Call Vendor</Text>
+                            </TouchableOpacity>
+                            <TouchableOpacity style={[styles.actionIconButton, styles.mapButton]} onPress={openGoogleMaps}>
+                                <Icon name="map-marker-radius" size={20} color="#FFF" />
+                                <Text style={styles.actionButtonText}>Track Location</Text>
+                            </TouchableOpacity>
+                        </View>
                     </View>
                 </View>
             </View>
@@ -462,6 +474,17 @@ const styles = StyleSheet.create({
         fontSize: 13,
         fontWeight: 'bold',
         marginLeft: 8,
+    },
+    shopImage: {
+        width: '100%',
+        height: 180,
+        backgroundColor: '#F5F5F5',
+    },
+    contactNameSubtext: {
+        fontSize: 14,
+        color: '#888',
+        marginBottom: 8,
+        fontWeight: '600',
     },
 });
 
